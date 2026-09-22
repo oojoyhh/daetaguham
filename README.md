@@ -6,7 +6,7 @@
 
 [라이브 데모](https://oojoyhh.github.io/daetaguham/) · [서비스 개요서](docs/overview.pdf) · [OpenAPI 명세](docs/openapi.yml) · [데이터 모델](docs/database.dbml)
 
-> 현재 저장소에는 샘플 데이터로 동작하는 인터랙티브 HTML 프로토타입과 API·DB 설계 문서가 들어 있습니다. 백엔드와 실제 AI 모델은 아직 연동하지 않았습니다.
+> 현재 저장소에는 샘플 데이터로 동작하는 인터랙티브 HTML 프로토타입과 API·DB 설계 문서가 들어 있습니다. Spring Boot·PostgreSQL 백엔드 기반을 구축했으며, 업무 API는 순차적으로 구현 중입니다.
 
 ## 해결하려는 문제
 
@@ -73,7 +73,9 @@
 | 데모 상태 | `localStorage`로 요청·승인 결과를 다음 화면에 반영 |
 | API | OpenAPI 3.0.3, 41 paths / 47 operations 설계 |
 | 데이터 모델 | DBML, 12 tables / 22 foreign keys 설계 |
-| 백엔드·인증·DB | 미구현 |
+| 백엔드 | Spring Boot 4.1.1 기반, 헬스 체크 구현 |
+| DB | PostgreSQL 17 연동, Flyway 마이그레이션 기반 구축 |
+| 인증·업무 API | 미구현 |
 | AI 추천 모델 | 추천 규칙과 응답 구조만 설계, 실제 모델 미연동 |
 
 ## 로컬에서 실행하기
@@ -88,10 +90,28 @@ python3 -m http.server 8767 --directory web
 
 브라우저에서 `http://127.0.0.1:8767`을 열고 알바생·점장·사장 중 한 역할을 선택합니다. 첫 화면의 **데모 초기화** 버튼을 누르면 저장된 샘플 상태를 처음으로 되돌릴 수 있습니다.
 
+### 백엔드 실행
+
+Java 21과 Docker Desktop이 필요합니다. 저장소 루트에서 PostgreSQL을 시작한 뒤 Spring Boot를 실행합니다.
+
+```bash
+docker compose up -d postgres
+cd backend
+./gradlew bootRun
+```
+
+- 서비스 헬스 체크: `http://localhost:8080/api/health`
+- DB 연결을 포함한 앱 상태: `http://localhost:8080/api/actuator/health`
+- 로컬 PostgreSQL: `localhost:15432`
+
+환경변수를 변경해야 한다면 `.env.example`을 복사해 `.env`로 사용합니다. `.env`는 Git에 포함되지 않습니다.
+
 ## 프로젝트 구조
 
 ```text
 daetaguham/
+├── backend/             # Spring Boot REST API
+├── compose.yml         # 로컬 PostgreSQL 개발 환경
 ├── web/                 # 역할별 인터랙티브 HTML 프로토타입
 ├── docs/
 │   ├── screenshots/     # README 대표 화면
@@ -103,7 +123,8 @@ daetaguham/
 
 ## 다음 단계
 
-- 백엔드 프로젝트 생성과 로그인·매장 참여 기능 구현
+- 핵심 엔티티와 Flyway 마이그레이션 구현
+- 로그인·매장 참여 기능 구현
 - 대타·교대·급구 요청 및 승인 API 구현
 - PostgreSQL 연동과 근무 겹침·권한 규칙 검증
 - 규칙 기반 후보 추천과 AI 설명 생성 연결

@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: daetaguham-backend
+  config:
+    import:
+      - optional:file:../.env[.properties]
+      - optional:file:.env[.properties]
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:15432/daetaguham}
+    username: ${DB_USERNAME:daetaguham}
+    password: ${DB_PASSWORD:daetaguham}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+
+server:
+  port: ${PORT:8080}
+  servlet:
+    context-path: /api
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: ${HEALTH_SHOW_DETAILS:never}
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: 대타구함 API
+    description: 대타·교대·급구 요청과 근무표 반영을 연결하는 백엔드
