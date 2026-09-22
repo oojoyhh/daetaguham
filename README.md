@@ -75,7 +75,7 @@
 | 데이터 모델 | DBML, 12 tables / 22 foreign keys 설계 |
 | 백엔드 | Spring Boot 4.1.1 기반, 헬스 체크 구현 |
 | DB | PostgreSQL 17 연동, Flyway V1(`users`, `stores`, `store_members`) 구현 |
-| 인증·업무 API | 미구현 |
+| 인증·업무 API | 회원가입·BCrypt 암호화 구현, 로그인·업무 API 미구현 |
 | AI 추천 모델 | 추천 규칙과 응답 구조만 설계, 실제 모델 미연동 |
 
 ## 로컬에서 실행하기
@@ -123,7 +123,7 @@ daetaguham/
 
 ## 다음 단계
 
-- 회원가입·로그인 API 구현
+- 로그인·JWT 인증 구현
 - 매장 생성·초대코드 참여 API 구현
 - 대타·교대·급구 요청 및 승인 API 구현
 - PostgreSQL 연동과 근무 겹침·권한 규칙 검증
