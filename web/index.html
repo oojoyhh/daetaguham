@@ -63,12 +63,12 @@
     </main>
   </div>
 
-  <script src="js/common.js"></script>
+  <script src="js/common.js?v=2"></script>
   <script>
     document.getElementById("resetDemo").addEventListener("click", () => {
       try {
         Object.keys(localStorage).forEach((key) => {
-          if (key === "show-api" || key.startsWith("store-notices-v3:")) localStorage.removeItem(key);
+          if (key === "show-api" || key.startsWith("store-notices-v3:") || key.startsWith("demo-")) localStorage.removeItem(key);
         });
         toast("샘플 데이터를 처음 상태로 돌렸어요");
       } catch (error) {

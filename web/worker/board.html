@@ -53,16 +53,7 @@
       <!-- 내 활동 -->
       <div id="mineView" hidden>
         <p class="group-title">내가 올린 요청</p>
-        <section class="card tight" style="margin-top:8px">
-          <a class="list-item" href="request.html">
-            <div class="grow"><p class="title num">대타 · 9/19(토) 14:00–22:00</p><p class="desc">지원자 3명이 기다리고 있어요</p></div>
-            <span class="pill open">모집 중</span><span class="chev" aria-hidden="true">›</span>
-          </a>
-          <a class="list-item" href="request.html?type=EXCHANGE">
-            <div class="grow"><p class="title num">교대 · 9/23(수) 14:00–22:00</p><p class="desc">대신 가능한 날 3일 · 지원자 3명</p></div>
-            <span class="pill open">모집 중</span><span class="chev" aria-hidden="true">›</span>
-          </a>
-        </section>
+        <section class="card tight" id="myRequests" style="margin-top:8px"></section>
 
         <p class="group-title">내가 지원한 요청</p>
         <section class="card tight" style="margin-top:8px">
@@ -90,7 +81,7 @@
     <nav class="tabbar" data-role="worker" data-active="board"></nav>
   </div>
 
-  <script src="../js/common.js"></script>
+  <script src="../js/common.js?v=2"></script>
   <script>
     // 예시: 한석휘에게 보이는 모집 중 요청
     const REQUESTS = [
@@ -100,6 +91,46 @@
       { id: "r3", type: "대타", store: "B", date: "2026-09-28", start: "12:00", end: "18:00", who: "인수연", memo: "미들", note: "건대점 전체 공개" },
     ];
     let filter = "ALL";
+
+    const DEFAULT_MY_REQUESTS = [
+      { type: "대타", when: "9/19(토) 14:00–22:00", desc: "지원자 3명이 기다리고 있어요", href: "request.html" },
+      { type: "교대", when: "9/23(수) 14:00–22:00", desc: "대신 가능한 날 3일 · 지원자 3명", href: "request.html?type=EXCHANGE" },
+    ];
+
+    function renderMyRequests() {
+      const saved = window.getDemoWorkerRequests ? window.getDemoWorkerRequests() : [];
+      const queryRequest = params.get("created") === "1" ? [{
+        type: params.get("type") || "대타",
+        date: params.get("date"),
+        start: params.get("start"),
+        end: params.get("end"),
+        mode: params.get("mode") || "PUBLIC",
+        targetName: params.get("target") || null,
+        applicants: 0,
+      }] : [];
+      const created = [...queryRequest, ...saved]
+        .filter((r, index, all) => index === all.findIndex((x) => `${x.type}-${x.date}-${x.start}` === `${r.type}-${r.date}-${r.start}`))
+        .map((r) => ({
+        type: r.type,
+        when: `${fmtDate(r.date)} ${r.start}–${r.end}`,
+        desc: r.mode === "DIRECT"
+          ? `${r.targetName}님에게 답변을 기다리고 있어요`
+          : (r.applicants ? `지원자 ${r.applicants}명이 기다리고 있어요` : "아직 지원자가 없어요"),
+      }));
+      const rows = [
+        ...created.map((r) => `
+          <div class="list-item" style="cursor:default">
+            <div class="grow"><p class="title num">${escapeHTML(r.type)} · ${escapeHTML(r.when)}</p><p class="desc">${escapeHTML(r.desc)}</p></div>
+            <span class="pill open">모집 중</span>
+          </div>`),
+        ...DEFAULT_MY_REQUESTS.map((r) => `
+          <a class="list-item" href="${r.href}">
+            <div class="grow"><p class="title num">${r.type} · ${r.when}</p><p class="desc">${r.desc}</p></div>
+            <span class="pill open">모집 중</span><span class="chev" aria-hidden="true">›</span>
+          </a>`),
+      ];
+      document.getElementById("myRequests").innerHTML = rows.join("");
+    }
 
     function renderOpen() {
       const list = REQUESTS.filter((r) => filter === "ALL" || r.type === filter);
@@ -128,6 +159,7 @@
     document.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => { filter = b.dataset.filter; renderOpen(); }));
 
     renderOpen();
+    renderMyRequests();
     setView(params.get("tab") === "mine" ? "mine" : "open");
   </script>
 </body>

@@ -93,6 +93,7 @@
         <p class="muted" id="doneWho"></p>
       </section>
       <div class="notice gray">지원이 오면 알림으로 알려드려요. 지원자 중 한 명을 고르면 바로 근무표에 들어가요.</div>
+      <a class="btn btn-primary btn-block" href="stores.html">내 매장 현황</a>
       <button class="btn btn-block" type="button" id="againBtn">급구 하나 더 올리기</button>
     </main>
 
@@ -114,6 +115,10 @@
     const excludedCount = { A: 2, B: 1 };   // 시간 겹침·근무 불가로 제외된 인원
 
     if (params.get("store") === "B") document.getElementById("store").value = "B";
+    if (params.get("date")) document.getElementById("date").value = params.get("date");
+    if (params.get("start")) document.getElementById("start").value = params.get("start");
+    if (params.get("end")) document.getElementById("end").value = params.get("end");
+    if (params.get("position")) document.getElementById("position").value = params.get("position");
     let scope = "ALL";
     const checked = new Set(["seoyeon", "harin", "minho"]);
 

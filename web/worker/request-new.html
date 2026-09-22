@@ -118,14 +118,14 @@
         <p class="big" id="doneTitle"></p>
         <p class="muted" id="doneDesc"></p>
       </section>
-      <a class="btn btn-primary btn-block" href="board.html?tab=mine">내 요청 보기</a>
-      <a class="btn btn-block" href="home.html">내 근무로</a>
+      <a class="btn btn-primary btn-block" id="doneRequestsLink" href="board.html?tab=mine">내 요청 보기</a>
+      <a class="btn btn-block" id="doneHomeLink" href="home.html">내 근무로</a>
     </main>
 
     <nav class="tabbar" data-role="worker" data-active="home"></nav>
   </div>
 
-  <script src="../js/common.js"></script>
+  <script src="../js/common.js?v=2"></script>
   <script>
     document.getElementById("backIcon").outerHTML = BACK_ICON;
 
@@ -264,6 +264,33 @@
 
       const label = isEx ? "교대" : "대타";
       const p = PEOPLE.find((x) => x.id === state.person);
+      const createdRequest = addDemoWorkerRequest({
+        id: `demo-${Date.now()}`,
+        type: label,
+        shiftId: Number(params.get("shift")) || 110,
+        date: shift.date,
+        start: shift.start,
+        end: shift.end,
+        memo: shift.memo,
+        mode: state.mode,
+        targetName: p ? p.name : null,
+        reason: document.getElementById("reason").value.trim() || "개인 사정",
+        availableDates: [...state.acceptDates].sort(),
+        status: "OPEN",
+        applicants: 0,
+      });
+      const resultParams = new URLSearchParams({
+        tab: "mine",
+        created: "1",
+        type: createdRequest.type,
+        date: createdRequest.date,
+        start: createdRequest.start,
+        end: createdRequest.end,
+        mode: createdRequest.mode,
+        target: createdRequest.targetName || "",
+      });
+      document.getElementById("doneRequestsLink").href = `board.html?${resultParams}`;
+      document.getElementById("doneHomeLink").href = `home.html?date=${shift.date}&requestType=${encodeURIComponent(label)}`;
       if (state.mode === "DIRECT") {
         document.getElementById("doneTitle").textContent = `${p.name}님에게 ${label}를 부탁했어요`;
         document.getElementById("doneDesc").textContent = isEx

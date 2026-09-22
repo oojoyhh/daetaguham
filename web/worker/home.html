@@ -133,7 +133,7 @@
     </form>
   </dialog>
 
-  <script src="../js/common.js"></script>
+  <script src="../js/common.js?v=2"></script>
   <script>
     const TODAY = "2026-09-15";
     const STORES = { A: { name: "성수점", cls: "a" }, B: { name: "건대점", cls: "b" } };
@@ -154,8 +154,17 @@
       { id: 112, date: "2026-09-27", store: "B", start: "10:00", end: "16:00", memo: "오픈" },
       { id: 113, date: "2026-09-30", store: "B", start: "14:00", end: "22:00", memo: "마감" },
     ];
+    const savedRequests = window.getDemoWorkerRequests ? window.getDemoWorkerRequests() : [];
+    savedRequests.filter((r) => r.status === "OPEN").forEach((request) => {
+      const target = shifts.find((s) => s.id === request.shiftId);
+      if (target) target.request = { type: request.type, applicants: request.applicants || 0 };
+    });
+    if (params.get("date") && params.get("requestType")) {
+      const target = shifts.find((s) => s.date === params.get("date"));
+      if (target) target.request = { type: params.get("requestType"), applicants: 0 };
+    }
     let view = { y: 2026, m: 9 };
-    let selected = "2026-09-19";
+    let selected = params.get("date") || "2026-09-19";
 
     function renderNext() {
       const n = shifts.filter((s) => s.date > TODAY).sort((a, b) => a.date.localeCompare(b.date))[0];
@@ -202,8 +211,11 @@
         if (past) {
           action = `<p class="help">지난 근무예요</p>`;
         } else if (s.request) {
-          progress = `<div class="request-progress"><b>${s.request.type} 요청 진행</b><span>${s.request.applicants}명이 신청했어요</span></div>`;
-          action = `<a class="btn btn-primary btn-block" href="request.html">지원자 확인하기</a>`;
+          const hasApplicants = s.request.applicants > 0;
+          progress = `<div class="request-progress"><b>${s.request.type} 요청 진행</b><span>${hasApplicants ? `${s.request.applicants}명이 신청했어요` : "아직 지원자가 없어요"}</span></div>`;
+          action = hasApplicants
+            ? `<a class="btn btn-primary btn-block" href="request.html">지원자 확인하기</a>`
+            : `<a class="btn btn-primary btn-block" href="board.html?tab=mine&created=1&type=${encodeURIComponent(s.request.type)}&date=${s.date}&start=${encodeURIComponent(s.start)}&end=${encodeURIComponent(s.end)}&mode=PUBLIC">요청 확인하기</a>`;
         } else {
           action = `<div class="btn-row">
                       <a class="btn" href="request-new.html?type=EXCHANGE&shift=${s.id}">교대 요청</a>

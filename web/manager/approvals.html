@@ -69,7 +69,7 @@
     // 예시 데이터 (GET /stores/{id}/approvals 응답이라고 가정). 사장은 ?role=owner로 매장을 전환해요.
     const STORE_APPROVALS = { A: [
       {
-        id: 3021, type: "대타", from: "박유진", to: "김민", when: "9/19(토) 14:00–22:00",
+        id: 3021, type: "대타", from: "박유진", to: "김민", when: "9/19(토) 14:00–22:00", scheduleDate: "2026-09-19",
         days: [{ name: "9/19(토)", rows: [
           { who: "박유진", s: 14, e: 22, kind: "gone" },
           { who: "김민", s: 14, e: 22, kind: "new" },
@@ -170,7 +170,10 @@
                   </div>
                   <span class="api-tag">PUT /requests/{id}/approval</span>`;
       } else if (a.status === "APPROVED") {
-        bottom = `<div class="notice ok">승인했어요. 근무표와 두 사람의 캘린더에 반영됐어요.</div>`;
+        const scheduleLink = a.scheduleDate
+          ? `<a class="btn btn-primary btn-block" href="schedule.html?date=${a.scheduleDate}&approved=${a.id}&from=${encodeURIComponent(a.from)}&to=${encodeURIComponent(a.to)}">${fmtDate(a.scheduleDate)} 근무표에서 확인</a>`
+          : "";
+        bottom = `<div class="notice ok">승인했어요. 근무표와 두 사람의 캘린더에 반영됐어요.</div>${scheduleLink}`;
       } else {
         bottom = `<div class="notice gray">반려했어요. 사유: ${escapeHTML(a.reason)}</div>`;
       }

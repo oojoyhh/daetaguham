@@ -33,6 +33,7 @@
         <b class="num">9월 14일 – 20일</b>
         <button class="icon-btn" type="button" aria-label="다음 주" data-todo="예시 데이터는 이번 주만 있어요">›</button>
       </div>
+      <p class="notice ok" id="approvalResult" hidden></p>
       <div class="days" id="days" role="group" aria-label="날짜 선택"></div>
 
       <h2 class="section-title" id="dayTitle"></h2>
@@ -124,6 +125,13 @@
       { id: 14, date: "2026-09-20", who: "김민", s: "10:00", e: "16:00", memo: "오픈" },
       { id: 15, date: "2026-09-20", who: "정재웅", s: "16:00", e: "22:00", memo: "마감" },
     ];
+    if (params.get("approved") === "3021") {
+      const approvedShift = STORE_DATA.A.shifts.find((s) => s.id === 13);
+      if (approvedShift) Object.assign(approvedShift, { who: params.get("to") || "김민", tag: "승인 반영" });
+      const result = document.getElementById("approvalResult");
+      result.hidden = false;
+      result.textContent = `${params.get("from") || "박유진"}님 근무가 ${params.get("to") || "김민"}님에게 변경됐어요.`;
+    }
     const WEEK = Array.from({ length: 7 }, (_, i) => toISO(2026, 9, 14 + i));
     let selected = WEEK.includes(params.get("date")) ? params.get("date") : TODAY;
     let editing = null;
@@ -169,7 +177,7 @@
             <b>${s.who || "담당자 미정"}</b>
             <p class="t">${s.s}–${s.e}</p>
           </span>
-          ${s.tag ? `<span class="pill wait">${s.tag}</span>` : `<span class="pill b${bandNo(s.memo)}">${s.memo}</span>`}
+          ${s.tag ? `<span class="pill ${s.tag === "승인 반영" ? "ok" : "wait"}">${s.tag}</span>` : `<span class="pill b${bandNo(s.memo)}">${s.memo}</span>`}
         </button>`).join("") : `<p class="empty">이날은 근무가 없어요</p>`;
       // 급구는 사장만 올릴 수 있어서, 사장이 볼 때 빈 근무가 있으면 급구 바로가기를 보여줘요
       document.getElementById("openShiftLink").hidden = !(isOwner && list.some((s) => !s.who));

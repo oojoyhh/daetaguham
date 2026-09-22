@@ -216,6 +216,20 @@
     try { localStorage.setItem(noticeKey(storeKey), JSON.stringify(notices)); } catch (e) { /* 저장소 사용 불가 시 화면에서만 유지 */ }
   };
 
+  // ---------- 포트폴리오 데모 상태 ----------
+  // 요청 등록 → 내 활동 → 내 근무가 한 흐름으로 이어지는 것을 보여주기 위한 브라우저 저장값이에요.
+  const WORKER_REQUEST_KEY = "demo-worker-requests-v1";
+  window.getDemoWorkerRequests = function () {
+    try { return JSON.parse(localStorage.getItem(WORKER_REQUEST_KEY) || "[]"); }
+    catch (e) { return []; }
+  };
+  window.addDemoWorkerRequest = function (request) {
+    const requests = getDemoWorkerRequests();
+    requests.unshift(request);
+    try { localStorage.setItem(WORKER_REQUEST_KEY, JSON.stringify(requests)); } catch (e) { /* 저장소 사용 불가 시 현재 화면만 유지 */ }
+    return request;
+  };
+
   // 공통 뒤로가기 아이콘
   window.BACK_ICON = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
 })();
