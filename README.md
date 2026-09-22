@@ -4,7 +4,7 @@
 
 대타구함은 알바생의 대타·교대 요청과 점장·사장의 근무표 관리를 함께 다루는 모바일 웹 서비스입니다. 단순히 사람을 구하는 데서 끝내지 않고, 변경 결과가 실제 근무표에 남도록 설계했습니다.
 
-[서비스 개요서](docs/overview.pdf) · [OpenAPI 명세](docs/openapi.yml) · [데이터 모델](docs/database.dbml)
+[라이브 데모](https://oojoyhh.github.io/daetaguham/) · [서비스 개요서](docs/overview.pdf) · [OpenAPI 명세](docs/openapi.yml) · [데이터 모델](docs/database.dbml)
 
 > 현재 저장소에는 샘플 데이터로 동작하는 인터랙티브 HTML 프로토타입과 API·DB 설계 문서가 들어 있습니다. 백엔드와 실제 AI 모델은 아직 연동하지 않았습니다.
 
@@ -103,7 +103,6 @@ daetaguham/
 
 ## 다음 단계
 
-- 정적 프로토타입 배포 및 공개 데모 URL 연결
 - 백엔드 프로젝트 생성과 로그인·매장 참여 기능 구현
 - 대타·교대·급구 요청 및 승인 API 구현
 - PostgreSQL 연동과 근무 겹침·권한 규칙 검증
