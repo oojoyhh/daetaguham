@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>전체 화면 | 대타구함</title>
+  <link rel="stylesheet" href="css/common.css">
+  <style>
+    .phone { padding-bottom: 32px; }
+    .hero { position:relative; overflow:hidden; padding: 32px 24px 28px; color:#fff; background:#194d42; }
+    .hero::after { display:none; }
+    .brand { display:flex; align-items:center; justify-content:space-between; position:relative; z-index:1; }
+    .brand h1 { font-size:26px; font-weight:850; letter-spacing:-.05em; }
+    .brand h1 em { color:#a9d2c9; font-style:normal; }
+    .demo { padding:5px 9px; border-radius:999px; background:rgba(255,255,255,.13); border:1px solid rgba(255,255,255,.22); font-size:10px; font-weight:800; letter-spacing:.12em; }
+    .hero > p { color:rgba(255,255,255,.72); margin-top:10px; max-width:320px; }
+    .hero strong { color:#fff; }
+    .group-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800; margin: 20px 4px 8px; }
+    .file { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="hero">
+      <div class="brand"><h1>전체 화면</h1><span class="demo">PROTOTYPE</span></div>
+      <p><strong>역할별 화면을 직접 확인해보세요.</strong><br>이 목록은 포트폴리오 검토와 개발 점검을 위한 화면 모음입니다.</p>
+    </div>
+    <main class="content" style="gap:0" id="groups"></main>
+  </div>
+  <script src="js/common.js"></script>
+  <script>
+    const GROUPS = [
+      { title: "공통", badge: "", items: [
+        ["login.html", "로그인 · 회원가입", "POST /auth/login, /auth/signup"],
+        ["start.html", "시작하기 (매장 참여 / 등록 선택)", ""],
+      ]},
+      { title: "알바생", badge: "worker", items: [
+        ["worker/home.html", "내 근무 (캘린더 · 교대 제안)", "GET /me/shifts"],
+        ["worker/request-new.html", "요청 올리기 (대타·교대 / 공개·지정)", "POST /requests"],
+        ["worker/request.html", "내 대타 요청 (지원자 고르기)", "PUT /requests/{id}/selection"],
+        ["worker/request.html?type=EXCHANGE", "내 교대 요청 (바꿀 근무 고르기)", "PUT /requests/{id}/selection"],
+        ["worker/board.html", "요청 게시판 · 내 활동", "GET /requests"],
+        ["worker/apply.html", "요청 보기 · 지원", "POST /requests/{id}/applications"],
+        ["worker/notifications.html", "알림", "GET /me/notifications"],
+        ["worker/me.html", "내 정보 · 근무 가능 시간", "PUT /me/availabilities"],
+        ["worker/join.html", "매장 참여 (초대코드)", "POST /stores/join"],
+      ]},
+      { title: "점장", badge: "manager", items: [
+        ["manager/today.html", "오늘 현황", "GET /stores/{id}/shifts"],
+        ["manager/schedule-bulk.html", "근무표 (월간 보기 · 한 달 짜기)", "POST /stores/{id}/shifts/bulk"],
+        ["manager/schedule.html", "이번 주 근무표 (한 건씩 고치기)", "POST /stores/{id}/shifts"],
+        ["manager/approvals.html", "근무 변경 승인", "PUT /requests/{id}/approval"],
+        ["manager/staff.html", "직원 관리 · 참여 신청", "PUT /stores/{id}/members/{userId}"],
+      ]},
+      { title: "사장", badge: "owner", items: [
+        ["owner/stores.html", "내 매장 현황", "GET /stores/my"],
+        ["owner/open-shift.html", "급구 등록 · AI 추천", "POST /stores/{id}/open-shifts"],
+        ["owner/open-shift-detail.html", "급구 지원자 고르기", "PUT /requests/{id}/selection"],
+        ["manager/schedule-bulk.html?role=owner", "매장 근무표 (성수점·건대점 전환)", "POST /stores/{id}/shifts/bulk"],
+        ["manager/today.html?role=owner", "매장 오늘 현황 (매장 전환)", "GET /stores/{id}/summary"],
+        ["manager/staff.html?role=owner", "매장 직원 (성수점·건대점 전환)", "GET /stores/{id}/members"],
+        ["owner/settings.html", "매장 설정 (승인 규칙 · 초대코드 · 점장)", "PUT /stores/{id}/settings"],
+        ["owner/store-new.html", "매장 만들기 (초대코드 바로 발급)", "POST /stores"],
+      ]},
+    ];
+    document.getElementById("groups").innerHTML = GROUPS.map((g) => `
+      <p class="group-title">${g.badge ? `<span class="role-badge ${g.badge}">${g.title}</span>` : g.title}</p>
+      <section class="card tight">
+        ${g.items.map(([href, label, api]) => `
+          <a class="list-item" href="${href}">
+            <div class="grow"><p class="title">${label}</p><p class="file">${href}${api ? " · " + api : ""}</p></div>
+            <span class="chev" aria-hidden="true">›</span>
+          </a>`).join("")}
+      </section>`).join("");
+  </script>
+</body>
+</html>
