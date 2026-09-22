@@ -1,6 +1,7 @@
 package com.daetaguham.common.error;
 
 import com.daetaguham.user.application.DuplicatePhoneException;
+import com.daetaguham.user.application.InvalidCredentialsException;
 
 import jakarta.validation.ConstraintViolationException;
 
@@ -32,6 +33,11 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(DuplicatePhoneException.class)
 	ResponseEntity<ApiErrorResponse> handleDuplicatePhone(DuplicatePhoneException exception) {
 		return error(HttpStatus.CONFLICT, "PHONE_ALREADY_EXISTS", exception.getMessage());
+	}
+
+	@ExceptionHandler(InvalidCredentialsException.class)
+	ResponseEntity<ApiErrorResponse> handleInvalidCredentials(InvalidCredentialsException exception) {
+		return error(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", exception.getMessage());
 	}
 
 	@ExceptionHandler(DataIntegrityViolationException.class)

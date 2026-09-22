@@ -1,5 +1,7 @@
 package com.daetaguham.user.api;
 
+import com.daetaguham.user.application.UserAccountService;
+import com.daetaguham.user.application.UserAccountService.LoginResult;
 import com.daetaguham.user.application.UserSignupService;
 import com.daetaguham.user.domain.User;
 
@@ -17,9 +19,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
 	private final UserSignupService userSignupService;
+	private final UserAccountService userAccountService;
 
-	public AuthController(UserSignupService userSignupService) {
+	public AuthController(UserSignupService userSignupService, UserAccountService userAccountService) {
 		this.userSignupService = userSignupService;
+		this.userAccountService = userAccountService;
 	}
 
 	@PostMapping("/signup")
@@ -27,5 +31,11 @@ public class AuthController {
 	public UserResponse signup(@Valid @RequestBody SignupRequest request) {
 		User user = userSignupService.signup(request.name(), request.phone(), request.password());
 		return UserResponse.from(user);
+	}
+
+	@PostMapping("/login")
+	public LoginResponse login(@Valid @RequestBody LoginRequest request) {
+		LoginResult result = userAccountService.login(request.phone(), request.password());
+		return LoginResponse.from(result);
 	}
 }

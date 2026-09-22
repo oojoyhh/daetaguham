@@ -42,3 +42,10 @@ info:
   app:
     name: 대타구함 API
     description: 대타·교대·급구 요청과 근무표 반영을 연결하는 백엔드
+
+app:
+  auth:
+    jwt:
+      issuer: ${JWT_ISSUER:daetaguham}
+      secret: ${JWT_SECRET:dev-only-secret-change-before-deploy-2026}
+      access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:PT1H}

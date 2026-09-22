@@ -75,7 +75,7 @@
 | 데이터 모델 | DBML, 12 tables / 22 foreign keys 설계 |
 | 백엔드 | Spring Boot 4.1.1 기반, 헬스 체크 구현 |
 | DB | PostgreSQL 17 연동, Flyway V1(`users`, `stores`, `store_members`) 구현 |
-| 인증·업무 API | 회원가입·BCrypt 암호화 구현, 로그인·업무 API 미구현 |
+| 인증·업무 API | 회원가입·로그인·JWT 인증·내 정보 조회 구현 |
 | AI 추천 모델 | 추천 규칙과 응답 구조만 설계, 실제 모델 미연동 |
 
 ## 로컬에서 실행하기
@@ -105,6 +105,7 @@ cd backend
 - 로컬 PostgreSQL: `localhost:15432`
 
 환경변수를 변경해야 한다면 `.env.example`을 복사해 `.env`로 사용합니다. `.env`는 Git에 포함되지 않습니다.
+배포 환경의 `JWT_SECRET`은 반드시 32byte 이상의 별도 무작위 값으로 설정해야 합니다.
 
 ## 프로젝트 구조
 
@@ -123,7 +124,6 @@ daetaguham/
 
 ## 다음 단계
 
-- 로그인·JWT 인증 구현
 - 매장 생성·초대코드 참여 API 구현
 - 대타·교대·급구 요청 및 승인 API 구현
 - PostgreSQL 연동과 근무 겹침·권한 규칙 검증
