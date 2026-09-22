@@ -1,200 +1,391 @@
 // ==========================================
-// SKALA 스마트 교육플랫폼 - 데이터 모델 (ERD)
-// 과제 및 피드백 통합 관리 시스템
+// 대타구함 - 데이터 모델 (ERD)
+// 알바 근무 대타·교대·급구 조율 서비스
+// ==========================================
+//
+// [핵심 설계 포인트]
+// 1. 소유와 고용의 분리: 매장 주인은 stores.owner_id, 점장·알바생은 store_members
+//    → 점장이 없는 매장 / 여러 매장을 가진 사장 / 여러 매장에서 일하는 알바생을 모두 표현
+// 2. 요청 단일 테이블: 대타·교대·급구를 shift_requests 하나에 type·mode·scope 세 축으로 표현
+// 3. 지정 제안 = 미리 만든 지원서: 한 명에게 부탁하면 request_applications에 PROPOSED 행을 함께 생성
+//    → 공개 요청과 지정 제안이 같은 확정 로직을 탐
+// 4. 저장하지 않고 계산하는 값: 주고받은 대타 횟수, 헬퍼 근무 여부, 월 근무시간, 근무 진행 상태
+// 5. 교대 매칭의 정규화: 요청자가 "대신 일할 수 있는 날"을 여러 개(request_available_dates),
+//    지원자가 "내놓을 근무"를 여러 개(application_offer_shifts) 고르고, 요청자가 그중 하나로 확정
+//
 // ==========================================
 
-// ==========================================
-// Enum (상수 및 상태값 정의)
-// ==========================================
-Enum RoleType {
-  ADMIN       [note: '시스템 관리자 (A로 시작하는 ID)']
-  PROFESSOR   [note: '교수자/매니저 (M으로 시작하는 ID)']
-  STUDENT     [note: '교육생 (S로 시작하는 ID)']
-}
-
-Enum UserStatus {
-  PENDING     [note: '가입 승인 대기 (기본값)']
-  APPROVED    [note: '승인 완료 - 로그인 가능']
-  REJECTED    [note: '가입 반려']
-}
-
-Enum ActivityType {
-  ASSIGNMENT  [note: '과제 - 파일 제출형']
-  QUIZ        [note: '퀴즈 - 문항 응시형']
-}
-
-Enum QuestionType {
-  MULTIPLE_CHOICE [note: '객관식 - 보기 중 정답 선택']
-  SHORT_ANSWER    [note: '단답형 - 텍스트 입력 후 자동 채점']
-}
-
-Enum GradingStatus {
-  PENDING     [note: '채점 대기']
-  DONE        [note: '채점 완료']
-}
 
 // ==========================================
-// Core Entities (핵심 개체)
+// Enum (상태값 정의)
+// ==========================================
+
+Enum MemberRole {
+  MANAGER  [note: '점장 - 사장만 임명·해제 가능']
+  WORKER   [note: '알바생 (기본값)']
+}
+
+Enum MemberStatus {
+  PENDING   [note: '초대코드로 참여 신청 - 사장·점장 승인 대기 (기본값)']
+  ACTIVE    [note: '승인 완료 - 근무표 열람·요청 가능']
+  REJECTED  [note: '참여 신청 거절']
+  LEFT      [note: '내보냄·퇴사 - 과거 기록은 유지']
+}
+
+Enum RequestType {
+  COVER       [note: '대타 - 내 근무를 다른 사람에게 넘김']
+  EXCHANGE    [note: '교대 - 내 근무와 상대 근무를 맞바꿈 (같은 매장끼리만)']
+  OPEN_SHIFT  [note: '급구 - 사장이 빈 근무에 사람을 모집 (사장만 등록 가능)']
+}
+
+Enum RequestMode {
+  PUBLIC  [note: '모두에게 올리기 - 지원자 중 요청자가 선택']
+  DIRECT  [note: '한 명에게 부탁 - 상대가 수락·거절']
+}
+
+Enum RequestScope {
+  STORE         [note: '이 매장 직원만']
+  OWNER_STORES  [note: '같은 사장이 운영하는 매장 전체 (교대는 사용 불가)']
+}
+
+Enum RequestStatus {
+  OPEN              [note: '모집 중 (기본값). 승인 반려 시에도 이 상태로 돌아옴']
+  PENDING_APPROVAL  [note: '상대가 정해짐 - 승인 필요 매장에서 사장·점장 승인 대기']
+  CONFIRMED         [note: '확정 - 근무표에 반영됨. 되돌리지 않음']
+  CANCELED          [note: '요청자가 취소']
+  EXPIRED           [note: '근무 시작 시각까지 확정되지 않음 (스케줄러가 변경)']
+}
+
+Enum ApplicationStatus {
+  PROPOSED      [note: '지정 제안을 받음 - 수락·거절 대기']
+  APPLIED       [note: '공개 요청에 지원함 - 요청자 선택 대기']
+  SELECTED      [note: '요청자가 선택함 / 지정 제안을 수락함']
+  DECLINED      [note: '지정 제안을 거절함']
+  NOT_SELECTED  [note: '다른 사람이 확정됨']
+  WITHDRAWN     [note: '선택 전에 지원자가 철회함']
+  REJECTED      [note: '사장·점장이 승인을 반려함 - reject_comment 필수']
+}
+
+Enum NotificationType {
+  REQUEST_OPENED     [note: '내가 받을 수 있는 대타·교대 요청이 올라옴']
+  OPEN_SHIFT_POSTED  [note: '급구 알림 (AI 추천 후보에게 일괄 발송)']
+  PROPOSAL_RECEIVED  [note: '지정 제안을 받음']
+  APPLICATION_NEW    [note: '내 요청에 누가 지원함']
+  APPROVAL_NEEDED    [note: '사장·점장에게 승인 요청']
+  CONFIRMED          [note: '근무 변경이 확정됨']
+  REJECTED           [note: '승인이 반려됨']
+  EXPIRED            [note: '요청이 만료됨']
+  MEMBER_REQUEST     [note: '매장 참여 신청이 들어옴']
+}
+
+
+// ==========================================
+// 사용자 · 매장
 // ==========================================
 
 Table users {
-  id varchar [primary key, note: 'PK: 사번(M) / 학번(S) / 관리자(A) - ID 접두사로 역할 자동 판별']
-  password varchar [not null, note: '암호화된 비밀번호 (BCrypt 등)']
-  name varchar [not null, note: '사용자 실명']
-  role RoleType [not null, note: 'ID 접두사 기반 자동 배정 (A→ADMIN, M→PROFESSOR, S→STUDENT)']
-  status UserStatus [not null, default: 'PENDING', note: '가입 승인 상태 - 관리자가 APPROVED로 변경 시 로그인 가능']
-  class_name varchar [note: '학생 소속 반 (예: AI 3기 - 1반) - 관리자가 승인 시 함께 배정']
+  id bigint [primary key, increment]
+  phone varchar(13) [not null, unique, note: '로그인 아이디 - 휴대폰 번호 (010-0000-0000)']
+  password varchar [not null, note: 'BCrypt 해시']
+  name varchar(30) [not null, note: '실명']
   created_at timestamp [not null, default: `now()`]
+
+  Note: '첨부 ERD와 동일한 사용자 계정 구조. 직원은 여러 매장에 소속될 수 있으므로 역할은 매장 소속에 둠. 사장은 stores.owner_id로 식별하는 운영·관리 액터이며 근무자로 배정하거나 대타·교대 요청/지원하지 않음. 시스템 관리자는 현재 범위 밖'
 }
 
-Table courses {
-  id varchar [primary key, note: 'PK: 강좌 코드 (예: C-2026-01)']
-  title varchar [not null, note: '강좌명']
-  target_class varchar [not null, note: '대상 반 (예: AI 3기 - 1반) - users.class_name과 매칭']
-  instructor_id varchar [not null, note: 'FK: 담당 교수 사번']
-  start_date date [not null, note: '강좌 시작일']
-  end_date date [not null, note: '강좌 종료일']
-  created_at timestamp [not null, default: `now()`]
-}
-
-// ==========================================
-// 수강 등록 (학생 ↔ 강좌 M:N 관계)
-// ==========================================
-// [수강 상태 처리 방식]
-// 수강 상태(수강 예정 / 수강 중 / 수강 완료)는 별도 컬럼으로 저장하지 않고,
-// courses.start_date / end_date와 현재 시각을 서버에서 비교하여 동적으로 계산합니다.
-//   - 현재 시각 < start_date → SCHEDULED (수강 예정)
-//   - start_date <= 현재 시각 <= end_date → IN_PROGRESS (수강 중)
-//   - 현재 시각 > end_date → COMPLETED (수강 완료)
-// 이 계산 결과는 GET /courses/my 응답의 enrollment_status 필드로 반환됩니다.
-
-Table enrollments {
-  id integer [primary key, increment, note: 'PK: 수강 등록 고유 ID']
-  student_id varchar [not null, note: 'FK: 학생 ID']
-  course_id varchar [not null, note: 'FK: 강좌 ID']
-  enrolled_at timestamp [not null, default: `now()`, note: '수강 등록 시각 (관리자가 학생 승인 시 target_class 기준으로 자동 등록)']
-
-  indexes {
-    (student_id, course_id) [unique, note: '동일 학생의 같은 강좌 중복 등록 방지']
-  }
-}
-
-// ==========================================
-// Activity Entities (학습 활동 - 과제/퀴즈 통합)
-// Single Table Inheritance 패턴 적용:
-// type 컬럼으로 ASSIGNMENT / QUIZ 구분
-// ==========================================
-
-Table activities {
-  id integer [primary key, increment, note: 'PK: 학습 활동 고유 ID']
-  course_id varchar [not null, note: 'FK: 소속 강좌']
-  type ActivityType [not null, note: '활동 구분 (ASSIGNMENT / QUIZ)']
-  title varchar [not null, note: '활동 제목']
-  content text [note: '가이드라인 및 상세 내용']
-  deadline timestamp [not null, note: '제출/응시 마감 일시']
-
-  // 과제(ASSIGNMENT) 전용 필드
-  max_score integer [note: '총 배점. ASSIGNMENT: 교수자가 직접 입력한 값을 저장. QUIZ: 문항 등록 시 questions.score의 합산값을 서버에서 자동 계산하여 저장(동적 계산 아님). API 응답 시 항상 이 컬럼 값을 사용.']
-  file_name varchar [note: '교수자 업로드 첨부파일명 (ASSIGNMENT 전용)']
-  file_url varchar [note: '첨부파일 저장 경로 (ASSIGNMENT 전용)']
-
-  // 퀴즈(QUIZ) 전용 필드
-  time_limit integer [note: '제한 시간(분) - QUIZ 전용']
-  max_attempts integer [note: '최대 응시 가능 횟수 - QUIZ 전용']
-
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [note: '최종 수정 일시']
-}
-
-Table questions {
-  id integer [primary key, increment, note: 'PK: 문항 고유 ID']
-  activity_id integer [not null, note: 'FK: 소속 퀴즈 활동 ID']
-  question_order integer [not null, note: '문항 표시 순서 (1부터 시작)']
-  type QuestionType [not null, note: '문항 유형 (객관식 / 단답형)']
-  score integer [not null, note: '해당 문항 배점']
-  content text [not null, note: '문제 내용']
-  correct_answer varchar [note: '단답형(SHORT_ANSWER) 자동 채점용 정답 텍스트']
-
-  indexes {
-    (activity_id, question_order) [unique, note: '같은 활동 내 문항 순서 중복 방지']
-  }
-}
-
-Table question_options {
-  id integer [primary key, increment, note: 'PK: 보기 고유 ID']
-  question_id integer [not null, note: 'FK: 소속 문항 ID']
-  option_order integer [not null, note: '보기 표시 순서 (1번부터)']
-  content varchar [not null, note: '보기 내용 텍스트']
-  is_correct boolean [not null, default: false, note: '정답 여부 (true = 정답 보기)']
-}
-
-// ==========================================
-// Submission & Feedback (제출 및 피드백)
-// ==========================================
-
-Table submissions {
-  id integer [primary key, increment, note: 'PK: 제출 고유 ID']
-  activity_id integer [not null, note: 'FK: 대상 학습 활동 ID']
-  student_id varchar [not null, note: 'FK: 제출 학생 ID']
-
-  submitted_at timestamp [not null, note: '최초 제출 시각. activities.deadline보다 늦으면 지각 제출로 판별하며, API 응답 시 is_late 필드(boolean)로 계산하여 반환됨']
-  updated_at timestamp [note: '최종 수정 시각 - 과제(ASSIGNMENT) 재제출 시 갱신. 퀴즈(QUIZ) 재응시 시에도 갱신되며(max_attempts 초과 전까지), 재응시 시 기존 quiz_answers 레코드를 모두 DELETE 후 신규 INSERT하여 최신 응시 결과만 유지함. max_attempts 초과 후에는 수정 불가.']
-  time_taken integer [note: 'QUIZ 전용: 응시 소요 시간(초). 시간 초과 자동 제출 시에는 time_limit(분)*60 값이 저장됨. ASSIGNMENT의 경우 NULL.']
-
-  // 과제 제출 관련
-  file_name varchar [note: '학생 제출 파일명 (ASSIGNMENT 전용)']
-  file_url varchar [note: '제출 파일 저장 경로 (ASSIGNMENT 전용)']
-
-  // 채점 결과
-  score decimal(5,2) [note: '획득 점수']
-  feedback text [note: '교수자 피드백 내용']
-  grading_status GradingStatus [not null, default: 'PENDING', note: '채점 상태']
-  graded_at timestamp [note: '채점 완료 시각']
-
+Table stores {
+  id bigint [primary key, increment]
+  owner_id bigint [not null, note: 'FK: 사장 (매장을 만든 사람)']
+  name varchar(50) [not null, note: '매장 이름 (예: 성수점)']
+  category varchar(30) [not null, note: '업종 (카페, 아이스크림·디저트, 편의점 등)']
+  address varchar(200) [note: '선택 입력']
+  invite_code varchar(6) [not null, unique, note: '초대코드 - 매장을 만들면 바로 발급, 사장이 재발급 가능']
+  approval_required boolean [not null, default: true, note: 'true: 대타·교대는 승인 후 확정 / false: 합의 즉시 확정 (통보만)']
   created_at timestamp [not null, default: `now()`]
 
   indexes {
-    (activity_id, student_id) [unique, note: '한 학생당 하나의 활동에 하나의 제출만 허용']
+    owner_id
   }
 }
 
-Table quiz_answers {
-  id integer [primary key, increment, note: 'PK: 답안 고유 ID']
-  submission_id integer [not null, note: 'FK: 소속 제출 ID']
-  question_id integer [not null, note: 'FK: 대상 문항 ID']
-  student_answer text [note: '학생 입력 답안 (객관식: 보기번호 / 단답형: 텍스트)']
-  is_correct boolean [note: '정답 여부 (자동 채점 결과)']
-  earned_score integer [note: '획득 점수 (정답 시 해당 문항 배점, 오답 시 0)']
+Table store_members {
+  id bigint [primary key, increment]
+  store_id bigint [not null]
+  user_id bigint [not null]
+  role MemberRole [not null, default: 'WORKER']
+  status MemberStatus [not null, default: 'PENDING']
+  requested_at timestamp [not null, default: `now()`, note: '초대코드로 참여 신청한 시각']
+  joined_at timestamp [note: '승인된 시각']
+  left_at timestamp [note: '내보낸 시각']
 
   indexes {
-    (submission_id, question_id) [unique, note: '하나의 제출에서 같은 문항에 대한 중복 답안 방지']
+    (store_id, user_id) [unique, note: '같은 매장에 중복 소속 방지 - 다시 들어오면 행을 재사용']
+    (user_id, status)
   }
+
+  Note: '사장은 이 테이블에 넣지 않음 (stores.owner_id). 점장이 없는 매장은 사장이 관리 권한을 대신 수행하되 직접 근무하지 않음. 근무 배정 대상은 ACTIVE인 점장·알바생 또는 같은 사장 소유 다른 매장의 ACTIVE 직원이며 사장은 제외'
 }
 
+
 // ==========================================
-// Relationships (테이블 간 관계 정의)
+// 근무
 // ==========================================
 
-// 강좌 → 교수자 (N:1)
-Ref: courses.instructor_id > users.id
+Table shift_templates {
+  id bigint [primary key, increment]
+  store_id bigint [not null]
+  name varchar(10) [not null, note: '시간대 이름 - 매장이 정함 (오픈 / 미들 / 마감 / 브레이크 등)']
+  start_time time [not null, note: '예: 10:00']
+  end_time time [not null, note: 'start_time보다 늦어야 함']
+  required_count int [not null, default: 1, note: '이 시간대에 필요한 사람 수 - 근무표를 짤 때 모자란 칸을 표시하는 데 씀']
+  created_at timestamp [not null, default: `now()`]
 
-// 수강 등록 → 학생, 강좌 (M:N 해소 테이블)
-Ref: enrollments.student_id > users.id
-Ref: enrollments.course_id > courses.id
+  indexes {
+    (store_id, name) [unique, note: '한 매장에 같은 이름의 시간대는 하나']
+  }
 
-// 학습 활동 → 강좌 (N:1)
-Ref: activities.course_id > courses.id
+  Note: '''
+  매장마다 쓰는 시간대 묶음. 근무표 짜기 화면에서 이 시간대가 표의 줄이 되고, 칸에 사람을 넣으면
+  이 시간이 shifts.start_at / end_at으로 들어감 (한 칸에 여러 명을 넣으면 사람 수만큼 shifts가 생김)
+  이름·시간·개수는 매장이 정함 (매장을 만들면 오픈 10:00-16:00, 미들 12:00-18:00, 마감 16:00-22:00을 기본으로 넣어줌)
+  [입력 검증] 이름 1~10자(편성 키 구분자인 | 제외), 종료 > 시작, 1 <= required_count <= 9. 오픈·미들·마감은 기본값이며 고정 enum이 아님
+  '''
+}
 
-// 퀴즈 문항 → 학습 활동 (N:1)
-Ref: questions.activity_id > activities.id
+Table shifts {
+  id bigint [primary key, increment]
+  store_id bigint [not null]
+  worker_id bigint [note: 'FK: 근무자. NULL이면 빈 근무 (급구 대상)']
+  start_at timestamp [not null]
+  end_at timestamp [not null, note: 'start_at보다 늦어야 함']
+  position varchar(10) [note: '매장이 정한 시간대 이름의 스냅샷. 기본값은 오픈 / 미들 / 마감이며 사용자 정의 이름도 허용. 시간대를 나중에 고쳐도 지난 근무는 그대로']
+  created_by bigint [not null, note: 'FK: 등록한 사장·점장']
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp
 
-// 보기 → 문항 (N:1)
-Ref: question_options.question_id > questions.id
+  indexes {
+    (store_id, start_at) [note: '매장 주간 근무표 조회']
+    (worker_id, start_at) [note: '개인 캘린더 조회 + 시간 겹침 검사 (모든 매장)']
+  }
 
-// 제출 → 학습 활동, 학생 (N:1)
-Ref: submissions.activity_id > activities.id
-Ref: submissions.student_id > users.id
+  Note: '''
+  [저장하지 않고 계산하는 값]
+  - 헬퍼 근무 여부: worker_id가 이 매장 ACTIVE 멤버가 아니면 헬퍼 (같은 사장 다른 매장 직원)
+  - 근무 상태: 현재 시각 기준 예정 / 근무 중 / 완료
+  - 월 근무시간: 해당 월 end_at - start_at 합계
+  [시간 겹침 규칙]
+  - 같은 worker_id의 근무는 매장이 달라도 시간이 겹치면 저장하지 않음 (409)
+  - end_at > start_at. 서로 맞닿은 근무(앞 근무 종료 = 다음 근무 시작)는 겹침 아님
+  - worker_id는 사장이 아닌 ACTIVE 직원만 허용. NULL인 빈 근무에는 직원 소속 검사를 적용하지 않음
+  [참조 기록 보존]
+  - shift_requests.shift_id, application_offer_shifts.shift_id, request_applications.selected_offer_shift_id에 참조된 근무는 요청 상태와 무관하게 삭제 제한 (409 SHIFT_REFERENCED). 참조된 행의 관리자 직접 수정도 값이 달라지면 제한
+  - 요청 확정 전용 트랜잭션에서 COVER/URGENT 담당자 변경 또는 EXCHANGE 담당자 교환은 허용
+  - 월간 일괄 저장은 값과 개수를 대조해 동일 근무의 id를 유지. 참조된 행이 누락되거나 달라지면 초기화를 포함한 전체 저장 거부. 참조 없는 행만 교체
+  '''
+}
 
-// 퀴즈 답안 → 제출, 문항 (N:1)
-Ref: quiz_answers.submission_id > submissions.id
-Ref: quiz_answers.question_id > questions.id
+Table store_notices {
+  id bigint [primary key, increment]
+  store_id bigint [not null]
+  notice_date date [not null, note: '이 전달사항이 해당하는 날짜']
+  content varchar(160) [not null, note: '전달할 내용']
+  created_by bigint [not null, note: 'FK: 작성한 사장·점장']
+  created_at timestamp [not null, default: `now()`]
+
+  indexes {
+    (store_id, notice_date) [note: '매장 전달사항 목록 조회']
+  }
+
+  Note: '''
+  매장 전달사항 (근무표와 분리된 매장 공지). 사장·점장이 쓰면 직원 알림 화면에 바로 보임
+  [저장하지 않고 계산하는 값]
+  - 목록에 보일지 여부: notice_date가 오늘보다 이전이면 지난 전달사항으로 보고 목록에서 내림 (행은 지우지 않음)
+  '''
+}
+
+Table availabilities {
+  id bigint [primary key, increment]
+  user_id bigint [not null]
+  day_of_week smallint [not null, note: '0=일 ~ 6=토']
+  start_time time [not null]
+  end_time time [not null]
+
+  indexes {
+    (user_id, day_of_week) [unique, note: '요일마다 한 구간']
+  }
+
+  Note: '근무 가능 시간 - 근무 배정 검증과 후보 추천에 사용. 0 <= day_of_week <= 6, end_time > start_time. 요일마다 한 구간이며 행이 없는 요일은 근무 불가'
+}
+
+
+// ==========================================
+// 요청 (대타 · 교대 · 급구)
+// ==========================================
+
+Table shift_requests {
+  id bigint [primary key, increment]
+  type RequestType [not null]
+  mode RequestMode [not null, default: 'PUBLIC', note: '급구는 항상 PUBLIC']
+  scope RequestScope [not null, default: 'STORE', note: '교대는 항상 STORE']
+  shift_id bigint [not null, note: 'FK: 넘기거나 바꿀 근무. 급구면 worker_id가 NULL인 빈 근무']
+  requester_id bigint [not null, note: 'FK: 요청자 (대타·교대는 근무자 본인, 급구는 사장)']
+  reason varchar(100) [note: '선택 입력인 요청 사유 / 급구 모집 안내. 대타·교대 API reason, 급구 API message를 이 필드에 저장']
+  status RequestStatus [not null, default: 'OPEN']
+  confirmed_at timestamp
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp
+
+  indexes {
+    (shift_id, status) [note: '한 근무에 진행 중(OPEN·PENDING_APPROVAL) 요청은 1개만 - 서버에서 검사']
+    (status, type)
+    requester_id
+  }
+
+  Note: '''
+  [상태 흐름]
+  OPEN → (지원자 선택 / 지정 제안 수락) → 승인 필요 매장이면 PENDING_APPROVAL, 아니면 CONFIRMED
+  PENDING_APPROVAL → 승인 시 CONFIRMED / 반려 시 OPEN으로 복귀 (해당 지원만 REJECTED)
+  OPEN·PENDING_APPROVAL → 요청자 취소 시 CANCELED / 근무 시작 시각 경과 시 EXPIRED
+  급구는 사장이 지원자를 직접 고르므로 승인 단계 없이 바로 CONFIRMED (사장이 직접 일한다는 의미가 아님)
+
+  [권한 및 무결성 - 서버 검증]
+  - COVER·EXCHANGE 요청자는 자기 근무를 가진 ACTIVE 점장·알바생. 사장은 OPEN_SHIFT만 요청
+  - OPEN_SHIFT는 PUBLIC, EXCHANGE는 STORE 범위. 교대는 같은 매장의 두 근무만 허용
+  - 같은 shift_id의 OPEN·PENDING_APPROVAL 요청은 1개만 허용. 위 일반 인덱스는 유니크 제약이 아니므로 트랜잭션 잠금 또는 부분 유니크 인덱스로 구현
+
+  [확정 시 한 트랜잭션]
+  1. 선택된 사람의 시간 겹침 재검사 (모든 매장)
+  2. 대타·급구: shifts.worker_id ← 지원자 / 교대: 두 근무의 worker_id 맞바꿈
+  3. 나머지 지원은 NOT_SELECTED, 같은 근무의 다른 진행 중 요청은 CANCELED
+  4. 관련자에게 CONFIRMED 알림
+
+  [주고받은 대타 기록 - 계산]
+  CONFIRMED인 COVER 요청에서 SELECTED 지원자가 requester를 도와준 것으로 집계
+  (A가 나를 도와준 횟수 / 내가 A를 도와준 횟수)
+  '''
+}
+
+Table request_applications {
+  id bigint [primary key, increment]
+  request_id bigint [not null]
+  applicant_id bigint [not null, note: 'FK: 지원자 / 지정 제안 받은 사람']
+  selected_offer_shift_id bigint [note: 'FK: 교대 확정 시 실제로 맞바꾼 근무 (application_offer_shifts 중 하나). 대타·급구는 NULL']
+  message varchar(60) [note: '지원할 때 한마디']
+  status ApplicationStatus [not null, note: 'DIRECT 요청이면 PROPOSED로, PUBLIC 요청이면 APPLIED로 생성']
+  decided_by bigint [note: 'FK: 승인·반려한 사장·점장']
+  reject_comment varchar(200) [note: '승인 반려 사유 (REJECTED일 때 필수, 요청자에게 보임)']
+  created_at timestamp [not null, default: `now()`]
+  responded_at timestamp [note: '수락·거절·선택·철회·반려 시각']
+
+  indexes {
+    (request_id, applicant_id) [unique, note: '한 요청에 한 사람당 한 행 - 철회 후 재지원은 행을 재사용']
+    (applicant_id, status)
+  }
+
+  Note: '지원자는 사장이 아닌 ACTIVE 직원. 교대 확정의 selected_offer_shift_id는 반드시 해당 지원서의 application_offer_shifts 중 하나여야 함. EXCHANGE 외 유형에서는 NULL. REJECTED이면 decided_by와 reject_comment 필수. 이 조건들은 서버에서 검증'
+}
+
+Table request_available_dates {
+  id bigint [primary key, increment]
+  request_id bigint [not null, note: 'FK: 공개 교대 요청']
+  available_date date [not null, note: '요청자가 대신 일할 수 있는 날 (달력에서 여러 날 선택)']
+
+  indexes {
+    (request_id, available_date) [unique]
+    available_date [note: '게시판에서 내 근무 날짜와 맞는 교대 요청 찾기']
+  }
+
+  Note: '''
+  공개(PUBLIC) 교대 요청에서 1일 이상 필수. 대타·급구·지정 교대에는 행이 없음
+  - 요청 날짜 이후, 원래 근무일과 요청자가 이미 근무가 있는 날은 고를 수 없음
+  - 게시판에는 이 날짜들 중 하나라도 내 근무가 있는 사람에게만 교대 요청이 보임
+  - 지원자는 이 날짜에 있는 자기 근무만 제안할 수 있음 (400)
+  '''
+}
+
+Table application_offer_shifts {
+  id bigint [primary key, increment]
+  application_id bigint [not null, note: 'FK: 교대 지원 / 지정 교대 제안']
+  shift_id bigint [not null, note: 'FK: 맞바꿀 후보 근무']
+
+  indexes {
+    (application_id, shift_id) [unique]
+  }
+
+  Note: '''
+  교대에서 바꿀 후보 근무를 여러 개 담음 (달력에서 복수 선택)
+  - 공개 교대: 지원자가 내놓는 자기 근무 (request_available_dates 날짜에 있는 근무만)
+  - 지정 교대: 요청자가 고른 상대의 근무
+  - 확정할 때 이 중 하나를 request_applications.selected_offer_shift_id로 저장하고 두 근무의 worker_id를 맞바꿈
+  '''
+}
+
+
+// ==========================================
+// 알림
+// ==========================================
+
+Table notifications {
+  id bigint [primary key, increment]
+  user_id bigint [not null, note: 'FK: 받는 사람']
+  type NotificationType [not null]
+  request_id bigint [note: 'FK: 관련 요청 (누르면 이동)']
+  store_id bigint [note: 'FK: 관련 매장']
+  message varchar(200) [not null]
+  is_read boolean [not null, default: false]
+  created_at timestamp [not null, default: `now()`]
+
+  indexes {
+    (user_id, is_read, created_at)
+  }
+
+  Note: '서비스 안 알림함만 제공. 문자·푸시는 범위 밖'
+}
+
+
+// ==========================================
+// Relationships
+// ==========================================
+
+// 매장 → 사장 (N:1)
+Ref: stores.owner_id > users.id
+
+// 매장 직원 (매장 ↔ 사용자 M:N 해소)
+Ref: store_members.store_id > stores.id
+Ref: store_members.user_id > users.id
+
+// 근무 → 매장, 근무자, 등록자 (N:1)
+Ref: shift_templates.store_id > stores.id
+
+Ref: shifts.store_id > stores.id
+Ref: shifts.worker_id > users.id
+Ref: shifts.created_by > users.id
+
+// 전달사항 → 매장, 작성자 (N:1)
+Ref: store_notices.store_id > stores.id
+Ref: store_notices.created_by > users.id
+
+// 근무 가능 시간 → 사용자 (N:1)
+Ref: availabilities.user_id > users.id
+
+// 요청 → 근무, 요청자 (N:1)
+Ref: shift_requests.shift_id > shifts.id
+Ref: shift_requests.requester_id > users.id
+
+// 지원 → 요청, 지원자, 확정된 교환 근무, 승인자 (N:1)
+Ref: request_applications.request_id > shift_requests.id
+Ref: request_applications.applicant_id > users.id
+Ref: request_applications.selected_offer_shift_id > shifts.id
+Ref: request_applications.decided_by > users.id
+
+// 공개 교대의 대신 일할 수 있는 날 → 요청 (N:1)
+Ref: request_available_dates.request_id > shift_requests.id
+
+// 교대 후보 근무 (지원 ↔ 근무 M:N 해소)
+Ref: application_offer_shifts.application_id > request_applications.id
+Ref: application_offer_shifts.shift_id > shifts.id
+
+// 알림 → 사용자, 요청, 매장 (N:1)
+Ref: notifications.user_id > users.id
+Ref: notifications.request_id > shift_requests.id
+Ref: notifications.store_id > stores.id
