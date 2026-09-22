@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>요청 올리기 | 알바생</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .shift-sum .time { font-size: 22px; font-weight: 800; letter-spacing: -.01em; }
+    .person { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-top: 1px solid var(--line-2); cursor: pointer; }
+    .person:first-child { border-top: 0; }
+    .person:has(input:checked) { background: var(--accent-soft); }
+    .person input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+    .person .grow { flex: 1; min-width: 0; }
+    .person .reason { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+    .ai-mark { font-size:10px; font-weight:800; color:var(--accent); background:var(--accent-soft); border-radius:4px; padding:1px 4px; margin-right:4px; vertical-align:1px; }
+    .person .ai-reason { font-size:12.5px; color:var(--ink-2); margin-top:3px; }
+    .their-availability { margin:-4px 4px 2px; color:var(--muted); font-size:13px; }
+    .done .big { font-size: 22px; font-weight: 800; }
+    .swap-calendar { padding:16px; }
+    .calendar-head { display:grid; grid-template-columns:36px 1fr 36px; align-items:center; margin-bottom:8px; }
+    .calendar-head b { font-size:16px; text-align:center; }
+    .calendar-nav { width:36px; height:36px; border:0; border-radius:10px; background:transparent; color:var(--ink-2); font-size:23px; cursor:pointer; }
+    .calendar-help { display:block; margin-bottom:12px; color:var(--muted); font-size:11.5px; text-align:center; }
+    .calendar-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+    .calendar-grid .weekday { padding:4px 0 7px; color:var(--muted); font-size:12px; font-weight:700; text-align:center; }
+    .calendar-day { position:relative; display:grid; place-items:center; aspect-ratio:1; border:0; border-radius:10px; background:transparent; color:#C5CAD4; font:inherit; font-size:15px; }
+    .calendar-day.pickable { color:var(--ink); font-weight:700; cursor:pointer; }
+    .calendar-day.pickable:hover { background:var(--line-2); }
+    .calendar-day.busy { color:var(--muted); text-decoration:line-through; }
+    .calendar-day.origin { color:var(--accent); font-weight:800; box-shadow:inset 0 0 0 1.5px var(--accent); }
+    .calendar-day.selected { color:#fff; background:var(--accent); font-weight:800; }
+    .calendar-legend { display:flex; justify-content:center; gap:14px; margin-top:10px; color:var(--muted); font-size:11.5px; }
+    .calendar-legend i { display:inline-block; width:9px; height:9px; border-radius:3px; margin-right:4px; vertical-align:-1px; }
+    .accept-summary { margin-top:12px; padding-top:12px; border-top:1px solid var(--line-2); font-size:13px; color:var(--ink-2); }
+    .accept-summary b { color:var(--accent); }
+    .content { padding-bottom:150px; }
+    .request-actions { position:fixed; left:50%; bottom:74px; z-index:19; width:min(430px,100%); transform:translateX(-50%); margin:0; padding:18px 16px 14px; background:linear-gradient(rgba(244,245,248,0),var(--bg) 26%); }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <header class="topbar sub">
+      <a class="icon-btn" href="home.html" aria-label="뒤로"><span id="backIcon"></span></a>
+      <h1>요청 올리기</h1>
+      <span class="account-meta"><b>한석휘</b><small>건대점</small></span>
+    </header>
+
+    <main class="content" id="formView">
+      <section class="card shift-sum">
+        <p class="help">바꾸고 싶은 근무</p>
+        <p class="time num" id="shiftTime"></p>
+        <p class="muted" id="shiftMeta"></p>
+      </section>
+
+      <h2 class="section-title">어떻게 할까요?</h2>
+      <div class="choices two" role="radiogroup" aria-label="요청 유형">
+        <label class="choice"><input type="radio" name="type" value="COVER"><span><b>대타</b><small>내 근무를 넘겨요</small></span></label>
+        <label class="choice"><input type="radio" name="type" value="EXCHANGE"><span><b>교대</b><small>다른 날과 바꿔요</small></span></label>
+      </div>
+
+      <h2 class="section-title">누구에게 물어볼까요?</h2>
+      <div class="segmented" role="group" aria-label="요청 방식">
+        <button type="button" data-mode="PUBLIC" aria-pressed="true">모두에게 올리기</button>
+        <button type="button" data-mode="DIRECT" aria-pressed="false">한 명에게 부탁</button>
+      </div>
+
+      <!-- 공개 -->
+      <div id="publicBox" class="stack">
+        <div class="choices" id="scopeChoices" role="radiogroup" aria-label="공개 범위">
+          <label class="choice"><input type="radio" name="scope" value="STORE" checked><span><b>건대점 직원</b><small>3명에게 보여요</small></span></label>
+          <label class="choice"><input type="radio" name="scope" value="OWNER_STORES"><span><b>사장님 매장 전체</b><small>성수점 · 건대점 9명에게 보여요</small></span></label>
+        </div>
+        <p class="help" id="exchangeScopeNote" hidden>교대는 같은 매장 직원끼리만 할 수 있어요.</p>
+
+        <!-- 공개 교대: 내가 대신 일할 수 있는 날 -->
+        <div id="acceptDatesBox" class="stack" hidden>
+          <h2 class="section-title">내가 대신 일할 수 있는 날 <small>여러 날 고를 수 있어요</small></h2>
+          <section class="card swap-calendar">
+            <div class="calendar-head"><button class="calendar-nav" type="button" id="acceptPrev" aria-label="이전 달">‹</button><b id="acceptMonth"></b><button class="calendar-nav" type="button" id="acceptNext" aria-label="다음 달">›</button></div>
+            <small class="calendar-help">이 날에 근무가 있는 동료만 교대를 제안할 수 있어요</small>
+            <div class="calendar-grid" id="acceptCalendar" aria-label="대신 일할 수 있는 날 선택"></div>
+            <div class="calendar-legend">
+              <span><i style="box-shadow:inset 0 0 0 1.5px var(--accent)"></i>바꿀 근무</span>
+              <span><i style="background:var(--accent)"></i>고른 날</span>
+              <span><i style="background:var(--line)"></i>이미 근무 있음</span>
+            </div>
+            <p class="accept-summary" id="acceptSummary"></p>
+          </section>
+          <span class="api-tag">POST /requests · availableDates</span>
+        </div>
+      </div>
+
+      <!-- 지정 -->
+      <div id="directBox" class="stack" hidden>
+        <section class="card tight" id="people"></section>
+        <span class="api-tag">GET /shifts/{id}/candidates?type</span>
+        <div id="theirShiftsBox" class="stack" hidden>
+          <h2 class="section-title" id="theirTitle">바꿀 수 있는 날</h2>
+          <p class="their-availability" id="theirAvailability"></p>
+          <div class="choices" id="theirShifts" role="group" aria-label="교환할 근무 복수 선택"></div>
+        </div>
+      </div>
+
+      <h2 class="section-title">요청 사유 <small>선택</small></h2>
+      <textarea class="textarea" id="reason" maxlength="100" rows="3" placeholder="예: 가족 일정이 생겼어요"></textarea>
+
+      <p class="error-text" id="formError" hidden></p>
+      <div class="bottom-bar request-actions">
+        <button class="btn btn-primary btn-block" type="button" id="submitBtn">요청 올리기</button>
+        <span class="api-tag" style="margin-top:6px">POST /requests</span>
+      </div>
+    </main>
+
+    <main class="content" id="doneView" hidden>
+      <section class="card done stack" style="gap:10px;margin-top:8px">
+        <span class="pill open" style="width:fit-content">모집 중</span>
+        <p class="big" id="doneTitle"></p>
+        <p class="muted" id="doneDesc"></p>
+      </section>
+      <a class="btn btn-primary btn-block" href="board.html?tab=mine">내 요청 보기</a>
+      <a class="btn btn-block" href="home.html">내 근무로</a>
+    </main>
+
+    <nav class="tabbar" data-role="worker" data-active="home"></nav>
+  </div>
+
+  <script src="../js/common.js"></script>
+  <script>
+    document.getElementById("backIcon").outerHTML = BACK_ICON;
+
+    // 예시: 내 근무 (home.html과 같은 데이터)
+    const MY_SHIFTS = {
+      107: { date: "2026-09-16", start: "14:00", end: "22:00", memo: "마감" },
+      109: { date: "2026-09-20", start: "10:00", end: "16:00", memo: "오픈" },
+      110: { date: "2026-09-23", start: "14:00", end: "22:00", memo: "마감" },
+      112: { date: "2026-09-27", start: "10:00", end: "16:00", memo: "오픈" },
+      113: { date: "2026-09-30", start: "14:00", end: "22:00", memo: "마감" },
+    };
+    const shift = MY_SHIFTS[params.get("shift")] || MY_SHIFTS[110];
+
+    // 예시: 요청할 수 있는 동료 (시간 겹치는 사람은 서버에서 이미 뺌)
+    const PEOPLE = [
+      { id: "minhyeok", name: "배민혁", ai: "그 시간에 근무가 없고, 나를 3번 도와줬어요",
+        shifts: [{ id: 201, date: "2026-09-22", start: "14:00", end: "22:00", memo: "마감" }, { id: 202, date: "2026-09-26", start: "10:00", end: "16:00", memo: "오픈" }, { id: 206, date: "2026-10-03", start: "14:00", end: "22:00", memo: "마감" }] },
+      { id: "suyeon", name: "인수연", ai: "이번 주 근무가 가장 적어요 (6시간)",
+        shifts: [{ id: 203, date: "2026-09-24", start: "10:00", end: "16:00", memo: "오픈" }, { id: 207, date: "2026-10-08", start: "10:00", end: "16:00", memo: "오픈" }] },
+      { id: "yeri", name: "권예리", ai: "수요일 저녁에 자주 일하고, 가능 시간이 맞아요",
+        shifts: [{ id: 204, date: "2026-09-21", start: "16:00", end: "22:00", memo: "마감" }, { id: 205, date: "2026-09-28", start: "16:00", end: "22:00", memo: "마감" }, { id: 208, date: "2026-10-05", start: "16:00", end: "22:00", memo: "마감" }] },
+    ];
+
+    const state = { type: params.get("type") === "EXCHANGE" ? "EXCHANGE" : "COVER", mode: "PUBLIC", person: null, theirShifts: new Set(), acceptDates: new Set() };
+    const busyDates = new Set(Object.values(MY_SHIFTS).map((s) => s.date));
+    const acceptView = { year: Number(shift.date.slice(0, 4)), month: Number(shift.date.slice(5, 7)) };
+
+    // 공개 교대: 내가 대신 일할 수 있는 날 달력
+    function renderAcceptCalendar() {
+      const { year, month } = acceptView;
+      document.getElementById("acceptMonth").textContent = `${year}년 ${month}월`;
+      const firstDay = new Date(year, month - 1, 1).getDay();
+      const lastDate = new Date(year, month, 0).getDate();
+      const blanks = Array.from({ length: firstDay }, () => '<span aria-hidden="true"></span>').join("");
+      const days = Array.from({ length: lastDate }, (_, i) => {
+        const iso = toISO(year, month, i + 1);
+        const isOrigin = iso === shift.date;
+        const isBusy = !isOrigin && busyDates.has(iso);
+        const pickable = iso > TODAY && !isOrigin && !isBusy;
+        const selected = state.acceptDates.has(iso);
+        const cls = ["calendar-day", pickable ? "pickable" : "", isBusy ? "busy" : "", isOrigin ? "origin" : "", selected ? "selected" : ""].join(" ");
+        const label = `${month}월 ${i + 1}일${isOrigin ? " 바꿀 근무" : isBusy ? " 이미 근무 있음" : ""}`;
+        return `<button type="button" class="${cls}" ${pickable ? `data-date="${iso}"` : "disabled"} aria-label="${label}" aria-pressed="${selected}">${i + 1}</button>`;
+      }).join("");
+      document.getElementById("acceptCalendar").innerHTML =
+        WEEKDAYS.map((d) => `<span class="weekday">${d}</span>`).join("") + blanks + days;
+
+      const picked = [...state.acceptDates].sort();
+      document.getElementById("acceptSummary").innerHTML = picked.length
+        ? `<b>${picked.length}일</b> · ${picked.map(fmtDate).join(" · ")}`
+        : "아직 고른 날이 없어요";
+    }
+
+    document.getElementById("acceptCalendar").addEventListener("click", (e) => {
+      const day = e.target.closest("[data-date]");
+      if (!day) return;
+      const d = day.dataset.date;
+      state.acceptDates.has(d) ? state.acceptDates.delete(d) : state.acceptDates.add(d);
+      document.getElementById("formError").hidden = true;
+      renderAcceptCalendar();
+    });
+    document.getElementById("acceptPrev").addEventListener("click", () => {
+      acceptView.month -= 1; if (acceptView.month < 1) { acceptView.month = 12; acceptView.year -= 1; }
+      renderAcceptCalendar();
+    });
+    document.getElementById("acceptNext").addEventListener("click", () => {
+      acceptView.month += 1; if (acceptView.month > 12) { acceptView.month = 1; acceptView.year += 1; }
+      renderAcceptCalendar();
+    });
+
+    document.getElementById("shiftTime").textContent = `${fmtDate(shift.date)} ${shift.start}–${shift.end}`;
+    document.getElementById("shiftMeta").textContent = `건대점 · ${shift.memo}`;
+    document.querySelector(`input[name="type"][value="${state.type}"]`).checked = true;
+
+    function render() {
+      const isEx = state.type === "EXCHANGE";
+      document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
+      document.getElementById("publicBox").hidden = state.mode !== "PUBLIC";
+      document.getElementById("directBox").hidden = state.mode !== "DIRECT";
+
+      // 교대는 같은 매장만
+      document.getElementById("scopeChoices").hidden = isEx;
+      document.getElementById("exchangeScopeNote").hidden = !isEx;
+      const showAccept = isEx && state.mode === "PUBLIC";
+      document.getElementById("acceptDatesBox").hidden = !showAccept;
+      if (showAccept) renderAcceptCalendar();
+
+      document.getElementById("people").innerHTML = PEOPLE.map((p) => `
+        <label class="person">
+          <input type="radio" name="person" value="${p.id}" ${state.person === p.id ? "checked" : ""}>
+          <span class="avatar">${shortName(p.name)}</span>
+          <span class="grow"><b>${p.name}</b><p class="reason">${isEx ? `교환 가능 · ${p.shifts.map((s) => fmtDate(s.date)).join(" · ")}` : `${fmtDate(shift.date)} 근무 가능`}</p><p class="ai-reason"><span class="ai-mark">AI</span>${p.ai}</p></span>
+        </label>`).join("");
+
+      const p = PEOPLE.find((x) => x.id === state.person);
+      const showTheirs = isEx && state.mode === "DIRECT" && p;
+      document.getElementById("theirShiftsBox").hidden = !showTheirs;
+      if (showTheirs) {
+        document.getElementById("theirTitle").textContent = `${p.name}님의 교환 가능한 근무`;
+        document.getElementById("theirAvailability").textContent = `근무 가능 시간과 현재 근무표를 반영한 ${p.shifts.length}개 근무예요. 여러 개 선택할 수 있어요.`;
+        document.getElementById("theirShifts").innerHTML = p.shifts.map((s) => `
+          <label class="choice"><input type="checkbox" name="their" value="${s.id}" ${state.theirShifts.has(s.id) ? "checked" : ""}>
+            <span><b class="num">${fmtDate(s.date)} ${s.start}–${s.end}</b><small>${s.memo}</small></span></label>`).join("");
+      }
+
+      const btn = document.getElementById("submitBtn");
+      btn.textContent = state.mode === "DIRECT"
+        ? (p ? `${p.name}님에게 ${isEx ? "교대 제안하기" : "부탁하기"}` : "부탁할 사람을 골라주세요")
+        : `${isEx ? "교대" : "대타"} 요청 올리기`;
+    }
+
+    document.querySelectorAll('input[name="type"]').forEach((r) => r.addEventListener("change", () => {
+      state.type = r.value; state.theirShifts = new Set(); render();
+    }));
+    document.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => {
+      state.mode = b.dataset.mode; render();
+    }));
+    document.getElementById("people").addEventListener("change", (e) => {
+      state.person = e.target.value; state.theirShifts = new Set(); render();
+    });
+    document.getElementById("theirShifts").addEventListener("change", (e) => {
+      const id = Number(e.target.value);
+      if (e.target.checked) state.theirShifts.add(id);
+      else state.theirShifts.delete(id);
+    });
+
+    document.getElementById("submitBtn").addEventListener("click", () => {
+      const err = document.getElementById("formError");
+      const isEx = state.type === "EXCHANGE";
+      let msg = "";
+      if (state.mode === "DIRECT" && !state.person) msg = "부탁할 사람을 골라주세요.";
+      else if (state.mode === "DIRECT" && isEx && state.theirShifts.size === 0) msg = "교환할 근무를 하나 이상 골라주세요.";
+      else if (state.mode === "PUBLIC" && isEx && state.acceptDates.size === 0) msg = "달력에서 대신 일할 수 있는 날을 하나 이상 골라주세요.";
+      if (msg) { err.textContent = msg; err.hidden = false; return; }
+      err.hidden = true;
+
+      const label = isEx ? "교대" : "대타";
+      const p = PEOPLE.find((x) => x.id === state.person);
+      if (state.mode === "DIRECT") {
+        document.getElementById("doneTitle").textContent = `${p.name}님에게 ${label}를 부탁했어요`;
+        document.getElementById("doneDesc").textContent = isEx
+          ? `선택한 ${state.theirShifts.size}개 근무 중 가능한 날짜를 고르면 알려드려요.`
+          : "수락하면 알려드려요. 거절하면 다른 사람에게 다시 부탁하거나 모두에게 올릴 수 있어요.";
+      } else {
+        const scope = isEx ? "건대점 직원" : (document.querySelector('input[name="scope"]:checked').value === "STORE" ? "건대점 직원" : "사장님 매장 전체");
+        document.getElementById("doneTitle").textContent = `${label} 요청을 올렸어요`;
+        document.getElementById("doneDesc").textContent = isEx
+          ? `고른 ${state.acceptDates.size}일 중에 근무가 있는 건대점 직원에게 알림을 보냈어요.`
+          : `${scope} 중 그 시간에 일할 수 있는 사람에게 알림을 보냈어요.`;
+      }
+      document.getElementById("formView").hidden = true;
+      document.getElementById("doneView").hidden = false;
+      window.scrollTo(0, 0);
+    });
+
+    render();
+  </script>
+</body>
+</html>

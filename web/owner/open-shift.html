@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>급구 등록 | 사장</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .step-no { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 12px; font-weight: 800; margin-right: 8px; }
+    .form { display: grid; gap: 14px; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    .cand { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-top: 1px solid var(--line-2); cursor: pointer; }
+    .cand:first-child { border-top: 0; }
+    .cand input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+    .cand .grow { flex: 1; min-width: 0; }
+    .cand .name { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+    .cand .reason { font-size: 13.5px; color: var(--ink-2); margin-top: 3px; }
+    .excluded { padding: 12px 18px 16px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line-2); }
+
+    .submit-bar { position: sticky; bottom: 68px; margin: 0 -16px -24px; padding: 20px 16px 16px; background: linear-gradient(rgba(244,245,248,0), var(--bg) 30%); }
+    .done .big { font-size: 22px; font-weight: 800; letter-spacing: -.01em; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <header class="topbar">
+      <h1>급구 등록</h1>
+      <span class="account-meta"><b>배스킨라빈스</b><small id="ownerStoreMeta">성수점 · 김효주</small></span>
+    </header>
+
+    <main class="content" id="formView">
+      <p class="help" style="padding:0 4px">미배정 근무를 올리면 일할 수 있는 사람에게 한 번에 알려요.</p>
+
+      <!-- 1. 근무 정보 -->
+      <h2 class="section-title"><span><span class="step-no">1</span>어떤 근무인가요?</span></h2>
+      <section class="card form">
+        <div class="field">
+          <label for="store">매장</label>
+          <select class="select" id="store">
+            <option value="A">성수점</option>
+            <option value="B">건대점</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="date">날짜</label>
+          <input class="input" type="date" id="date" value="2026-09-25" min="2026-09-15">
+        </div>
+        <div class="two">
+          <div class="field">
+            <label for="start">시작</label>
+            <input class="input" type="time" id="start" value="12:00" step="1800">
+          </div>
+          <div class="field">
+            <label for="end">종료</label>
+            <input class="input" type="time" id="end" value="20:00" step="1800">
+          </div>
+        </div>
+        <p class="error-text" id="timeError" hidden>종료 시간은 시작 시간보다 늦어야 해요.</p>
+        <div class="field">
+          <label for="position">시간대 이름 <small>선택</small></label>
+          <input class="input" id="position" maxlength="10" placeholder="예: 오픈, 미들, 마감">
+        </div>
+        <div class="field">
+          <label for="message">모집 안내 <small>선택</small></label>
+          <textarea class="textarea" id="message" maxlength="100" rows="2" placeholder="직원에게 전달할 내용을 적어주세요."></textarea>
+        </div>
+      </section>
+
+      <!-- 2. 대상 -->
+      <h2 class="section-title"><span><span class="step-no">2</span>누구에게 알릴까요?</span></h2>
+      <div class="segmented" role="group" aria-label="모집 범위">
+        <button type="button" data-scope="STORE" aria-pressed="false" id="scopeStore">이 매장만</button>
+        <button type="button" data-scope="ALL" aria-pressed="true">내 매장 전체</button>
+      </div>
+      <section class="card tight">
+        <div id="candList"></div>
+        <p class="excluded" id="excluded"></p>
+      </section>
+      <span class="api-tag">GET /stores/{id}/candidates?startAt&amp;endAt&amp;scope</span>
+
+      <div class="submit-bar">
+        <button class="btn btn-primary btn-block" type="button" id="submitBtn"></button>
+        <span class="api-tag" style="margin-top:6px">POST /stores/{id}/open-shifts</span>
+      </div>
+    </main>
+
+    <!-- 등록 완료 -->
+    <main class="content" id="doneView" hidden>
+      <section class="card done stack" style="gap:12px;margin-top:8px">
+        <span class="pill open" style="width:fit-content">모집 중</span>
+        <p class="big num" id="doneWhen"></p>
+        <p class="muted" id="doneWho"></p>
+      </section>
+      <div class="notice gray">지원이 오면 알림으로 알려드려요. 지원자 중 한 명을 고르면 바로 근무표에 들어가요.</div>
+      <button class="btn btn-block" type="button" id="againBtn">급구 하나 더 올리기</button>
+    </main>
+
+    <nav class="tabbar" data-role="owner" data-active="open"></nav>
+  </div>
+
+  <script src="../js/common.js"></script>
+  <script>
+    const STORE = { A: { name: "성수점", cls: "store-a" }, B: { name: "건대점", cls: "store-b" } };
+
+    // 예시 데이터: 서버가 시간 겹침을 먼저 걸러내고, 점수 순으로 정렬해서 AI 추천 이유와 함께 준다고 가정
+    const candidates = [
+      { id: "suyeon", name: "인수연", store: "B", reason: "이번 주 근무가 가장 적고, 금요일 종일 가능해요" },
+      { id: "kimmin", name: "김민", store: "A", reason: "건대점에서도 두 번 일해봤고, 금요일 종일 가능해요" },
+      { id: "jinho", name: "이진호", store: "A", reason: "금요일 오후 가능하고, 최근 급구를 안 했어요" },
+      { id: "minhyeok", name: "배민혁", store: "B", reason: "시간은 맞지만 이번 주 근무가 조금 많아요" },
+      { id: "yujin", name: "박유진", store: "A", reason: "가능하지만 최근 급구를 3번 해줬어요" },
+    ];
+    const excludedCount = { A: 2, B: 1 };   // 시간 겹침·근무 불가로 제외된 인원
+
+    if (params.get("store") === "B") document.getElementById("store").value = "B";
+    let scope = "ALL";
+    const checked = new Set(["seoyeon", "harin", "minho"]);
+
+    const storeValue = () => document.getElementById("store").value;
+    const visible = () => candidates.filter((c) => scope === "ALL" || c.store === storeValue());
+
+    function render() {
+      document.querySelectorAll('.account-meta small').forEach(el => el.textContent = STORE[storeValue()].name);
+      const list = visible();
+      document.getElementById("ownerStoreMeta").textContent = `${STORE[storeValue()].name} · 김효주`;
+      [...checked].forEach((id) => { if (!list.some((c) => c.id === id)) checked.delete(id); });
+
+      document.getElementById("scopeStore").textContent = `${STORE[storeValue()].name}만`;
+      document.querySelectorAll("[data-scope]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.scope === scope)));
+
+      document.getElementById("candList").innerHTML = list.map((c) => `
+        <label class="cand">
+          <input type="checkbox" value="${c.id}" ${checked.has(c.id) ? "checked" : ""}>
+          <div class="grow">
+            <p class="name">${c.name}<span class="pill ${STORE[c.store].cls}">${STORE[c.store].name}</span></p>
+            <p class="reason">${escapeHTML(c.reason)}</p>
+          </div>
+        </label>`).join("") || `<p class="empty">알릴 수 있는 사람이 없어요</p>`;
+
+      const ex = scope === "ALL" ? excludedCount.A + excludedCount.B : excludedCount[storeValue()];
+      document.getElementById("excluded").textContent = `그 시간에 이미 근무가 있거나 쉬는 날인 ${ex}명은 뺐어요.`;
+
+      const btn = document.getElementById("submitBtn");
+      btn.textContent = checked.size ? `${checked.size}명에게 알림 보내기` : "알릴 사람을 골라주세요";
+      btn.disabled = checked.size === 0;
+    }
+
+    function validTime() {
+      const ok = document.getElementById("end").value > document.getElementById("start").value;
+      document.getElementById("timeError").hidden = ok;
+      return ok;
+    }
+
+    document.getElementById("candList").addEventListener("change", (e) => {
+      if (e.target.type !== "checkbox") return;
+      e.target.checked ? checked.add(e.target.value) : checked.delete(e.target.value);
+      render();
+    });
+
+    document.querySelectorAll("[data-scope]").forEach((b) =>
+      b.addEventListener("click", () => { scope = b.dataset.scope; render(); })
+    );
+    document.getElementById("store").addEventListener("change", render);
+    document.getElementById("start").addEventListener("change", validTime);
+    document.getElementById("end").addEventListener("change", validTime);
+
+    document.getElementById("submitBtn").addEventListener("click", () => {
+      if (!validTime()) return;
+      const names = candidates.filter((c) => checked.has(c.id)).map((c) => c.name);
+      document.getElementById("doneWhen").textContent =
+        `${STORE[storeValue()].name} ${fmtDate(document.getElementById("date").value)} ${document.getElementById("start").value}–${document.getElementById("end").value}`;
+      document.getElementById("doneWho").textContent = `${names.join(", ")}님에게 알림을 보냈어요.`;
+      document.getElementById("formView").hidden = true;
+      document.getElementById("doneView").hidden = false;
+      window.scrollTo(0, 0);
+      toast(`${names.length}명에게 알림을 보냈어요`);
+    });
+
+    document.getElementById("againBtn").addEventListener("click", () => {
+      document.getElementById("doneView").hidden = true;
+      document.getElementById("formView").hidden = false;
+    });
+
+    render();
+  </script>
+</body>
+</html>

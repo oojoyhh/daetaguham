@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>매장 설정 | 사장</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .code { font-family: var(--mono); font-size: 26px; font-weight: 800; letter-spacing: .16em; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <header class="topbar">
+      <h1>매장 설정</h1>
+      <span class="account-meta"><b>김효주 사장님</b><small>매장 설정</small></span>
+    </header>
+
+    <main class="content">
+      <div class="segmented" role="group" aria-label="매장 선택">
+        <button type="button" data-store="A" aria-pressed="true">성수점</button>
+        <button type="button" data-store="B" aria-pressed="false">건대점</button>
+      </div>
+
+      <h2 class="section-title">근무 변경 규칙</h2>
+      <section class="card tight">
+        <div class="setting-row">
+          <div class="grow">
+            <b>대타·교대는 승인 후 확정</b>
+            <small id="policyHelp"></small>
+          </div>
+          <label class="switch"><input type="checkbox" id="policy" aria-label="대타·교대 승인 필요"><span></span></label>
+        </div>
+      </section>
+
+      <h2 class="section-title">초대코드</h2>
+      <section class="card stack" style="gap:12px">
+        <p class="code" id="code"></p>
+        <p class="help">직원에게 이 코드를 알려주세요. 코드로 참여 신청이 오면 승인해야 들어올 수 있어요.</p>
+        <div class="btn-row">
+          <button class="btn" type="button" id="renewBtn">새 코드 만들기</button>
+          <button class="btn btn-primary" type="button" id="copyBtn">복사</button>
+        </div>
+      </section>
+
+      <h2 class="section-title">점장 <small>점장은 근무표·승인·직원 관리를 할 수 있어요</small></h2>
+      <section class="card tight" id="managerList"></section>
+      <span class="api-tag">PUT /stores/{id}/settings · POST /stores/{id}/invite-code · PUT /stores/{id}/members/{userId}/role</span>
+    </main>
+
+    <nav class="tabbar" data-role="owner" data-active="settings" data-counts="approvals:3"></nav>
+  </div>
+
+  <dialog class="sheet" id="renewSheet">
+    <form method="dialog">
+      <div class="sheet-body">
+        <h3>새 초대코드를 만들까요?</h3>
+        <p>지금 코드는 더 이상 쓸 수 없어요. 이미 들어온 직원에게는 영향이 없어요.</p>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn" value="no">취소</button>
+        <button class="btn btn-primary" value="yes">새로 만들기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="../js/common.js"></script>
+  <script>
+    const STORES = {
+      A: { name: "성수점", approval: true, code: "SEONG7",
+           staff: [{ id: "gyewon", name: "김계원", manager: true }, { id: "jinho", name: "이진호" }, { id: "kimmin", name: "김민" }, { id: "jaewoong", name: "정재웅" }, { id: "yujin", name: "박유진" }] },
+      B: { name: "건대점", approval: false, code: "GUNDA3",
+           staff: [{ id: "seokhwi", name: "한석휘" }, { id: "yeri", name: "권예리" }, { id: "minhyeok", name: "배민혁" }, { id: "suyeon", name: "인수연" }] },
+    };
+    let storeKey = "A";
+    const store = () => STORES[storeKey];
+
+    function render() {
+      const s = store();
+      document.querySelectorAll("[data-store]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.store === storeKey)));
+      document.getElementById("policy").checked = s.approval;
+      document.getElementById("policyHelp").textContent = s.approval
+        ? "직원끼리 합의해도 점장님이나 사장님이 승인해야 근무표가 바뀌어요."
+        : "직원끼리 합의하면 바로 바뀌고, 알림만 받아요.";
+      document.getElementById("code").textContent = s.code;
+
+      const hasManager = s.staff.some((m) => m.manager);
+      document.getElementById("managerList").innerHTML = (hasManager ? "" :
+        `<div class="setting-row"><div class="grow"><small>점장이 없어요. 사장님이 모든 관리를 해요.</small></div></div>`) +
+        s.staff.map((m) => `
+          <div class="setting-row">
+            <span class="avatar">${shortName(m.name)}</span>
+            <div class="grow"><b>${m.name}</b><small>${m.manager ? "점장" : "알바생"}</small></div>
+            <button class="btn btn-sm ${m.manager ? "btn-danger" : ""}" type="button" data-id="${m.id}">${m.manager ? "점장 해제" : "점장 임명"}</button>
+          </div>`).join("");
+    }
+
+    document.querySelectorAll("[data-store]").forEach((b) => b.addEventListener("click", () => { storeKey = b.dataset.store; render(); }));
+
+    document.getElementById("policy").addEventListener("change", (e) => {
+      store().approval = e.target.checked;
+      render();
+      toast(e.target.checked ? `${store().name}: 승인 후 확정으로 바꿨어요` : `${store().name}: 통보만 받도록 바꿨어요`);
+    });
+
+    document.getElementById("copyBtn").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(store().code); } catch (e) { /* 복사 불가 환경 */ }
+      toast(`초대코드 ${store().code}를 복사했어요`);
+    });
+
+    const renewSheet = document.getElementById("renewSheet");
+    document.getElementById("renewBtn").addEventListener("click", () => renewSheet.showModal());
+    renewSheet.addEventListener("close", () => {
+      if (renewSheet.returnValue !== "yes") return;
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      store().code = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+      render();
+      toast("새 초대코드를 만들었어요");
+    });
+
+    document.getElementById("managerList").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-id]");
+      if (!b) return;
+      const m = store().staff.find((x) => x.id === b.dataset.id);
+      m.manager = !m.manager;
+      render();
+      toast(m.manager ? `${m.name}님을 점장으로 임명했어요` : `${m.name}님의 점장을 해제했어요`);
+    });
+
+    render();
+  </script>
+</body>
+</html>

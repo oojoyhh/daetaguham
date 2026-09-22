@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>급구 지원자 | 사장</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .summary .date { font-size: 24px; font-weight: 850; letter-spacing: -.02em; }
+    .summary .time { font-size: 16px; color: var(--ink-2); margin-top: 2px; }
+    .info { display: grid; grid-template-columns: 72px 1fr; gap: 8px 12px; font-size: 14px; margin: 16px 0 0; padding-top: 16px; border-top: 1px solid var(--line-2); }
+    .info dt { color: var(--muted); }
+    .info dd { margin: 0; }
+
+    .applicant { display: grid; grid-template-columns: 44px minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 16px 18px; border-top: 1px solid var(--line-2); }
+    .applicant:first-child { border-top: 0; }
+    .applicant .avatar { width: 44px; height: 44px; }
+    .applicant .name { display: flex; align-items: center; gap: 6px; font-size: 17px; font-weight: 850; }
+    .applicant .meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .applicant .reason { font-size: 13px; color: var(--ink-2); margin-top: 6px; }
+    .ai-mark { font-size: 10px; font-weight: 800; color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 1px 4px; margin-right: 4px; vertical-align: 1px; }
+    .applicant.dim { opacity: .45; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <header class="topbar sub">
+      <a class="icon-btn" href="stores.html" aria-label="뒤로"><span id="backIcon"></span></a>
+      <h1>급구 지원자</h1>
+      <span class="account-meta"><b>김효주 사장님</b><small>건대점</small></span>
+    </header>
+
+    <main class="content">
+      <section class="card summary">
+        <div class="row between">
+          <p class="date num" id="date"></p>
+          <span class="pill open" id="statusPill">모집 중</span>
+        </div>
+        <p class="time num" id="time"></p>
+        <dl class="info" id="info"></dl>
+        <span class="api-tag" style="margin-top:12px">GET /requests/{id}</span>
+      </section>
+
+      <div class="notice" id="notice" hidden></div>
+
+      <h2 class="section-title" id="listTitle"></h2>
+      <section class="card tight" id="applicants"></section>
+      <p class="help" style="padding:0 4px">급구는 사장님이 고르면 승인 없이 바로 근무표에 들어가요.</p>
+      <span class="api-tag">PUT /requests/{id}/selection</span>
+
+      <button class="btn btn-text btn-block" type="button" id="cancelBtn">급구 취소</button>
+    </main>
+
+    <nav class="tabbar" data-role="owner" data-active="open"></nav>
+  </div>
+
+  <dialog class="sheet" id="selectSheet">
+    <form method="dialog">
+      <div class="sheet-body">
+        <h3 id="selectTitle"></h3>
+        <p id="selectDesc"></p>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn" value="no">취소</button>
+        <button class="btn btn-primary" value="yes">확정하기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="cancelSheet">
+    <form method="dialog">
+      <div class="sheet-body">
+        <h3>급구를 취소할까요?</h3>
+        <p>지원자와 알림 받은 사람들에게 취소됐다고 알려드려요. 근무는 미배정 상태로 남아요.</p>
+        <span class="api-tag">PUT /requests/{id}/cancel</span>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn" value="no">돌아가기</button>
+        <button class="btn btn-danger" value="yes">급구 취소</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="../js/common.js"></script>
+  <script>
+    document.getElementById("backIcon").outerHTML = BACK_ICON;
+
+    // 예시 데이터 (GET /requests/{id} - 급구를 올린 사장에게는 지원자 전체가 옴)
+    const OPEN_SHIFTS = {
+      g1: {
+        store: "건대점", date: "2026-09-29", start: "12:00", end: "20:00", memo: "미들",
+        scope: "내 매장 전체 (성수점 · 건대점)", notified: 4, message: "화요일 점심 손님이 많아요. 도와주세요!",
+        applicants: [
+          { id: "seokhwi", name: "한석휘", store: "건대점", week: 14, helper: 1, appliedAt: "11:40", reason: "건대점 소속이고 이번 주 근무가 적어요" },
+          { id: "jaewoong", name: "정재웅", store: "성수점", week: 24, helper: 0, appliedAt: "12:15", reason: "성수점에서 오는 헬퍼예요. 이번 주 근무가 많은 편이에요" },
+        ],
+      },
+    };
+    const shift = OPEN_SHIFTS[params.get("id")] || OPEN_SHIFTS.g1;
+    let status = "OPEN";   // OPEN → CONFIRMED / CANCELED
+    let chosen = null;
+    let pending = null;
+
+    document.querySelectorAll(".account-meta small").forEach((el) => (el.textContent = shift.store));
+    document.getElementById("date").textContent = fmtDate(shift.date);
+    document.getElementById("time").textContent = `${shift.start}–${shift.end} · ${shift.store} ${shift.memo}`;
+    document.getElementById("info").innerHTML = [
+      ["범위", shift.scope], ["알림", `AI 추천 후보 ${shift.notified}명에게 보냈어요`], ["한마디", shift.message],
+    ].map(([k, v]) => `<dt>${k}</dt><dd>${escapeHTML(v)}</dd>`).join("");
+
+    function render() {
+      const pill = document.getElementById("statusPill");
+      const notice = document.getElementById("notice");
+      if (status === "OPEN") {
+        pill.className = "pill open"; pill.textContent = "모집 중";
+        notice.hidden = true;
+      } else if (status === "CONFIRMED") {
+        pill.className = "pill ok"; pill.textContent = "확정";
+        notice.hidden = false; notice.className = "notice ok";
+        notice.textContent = `${chosen.name}님으로 확정했어요. ${shift.store} 근무표와 ${chosen.name}님 캘린더에 바로 들어갔어요.`;
+      } else {
+        pill.className = "pill"; pill.textContent = "취소됨";
+        notice.hidden = false; notice.className = "notice gray";
+        notice.textContent = "급구를 취소했어요. 근무는 미배정 상태로 남아요.";
+      }
+      document.getElementById("cancelBtn").hidden = status !== "OPEN";
+      document.getElementById("listTitle").innerHTML = `지원한 사람 <small>${shift.applicants.length}명</small>`;
+
+      document.getElementById("applicants").innerHTML = shift.applicants.length ? shift.applicants.map((a) => {
+        const isChosen = chosen && chosen.id === a.id;
+        const dim = (status === "CONFIRMED" && !isChosen) || status === "CANCELED";
+        let action = "";
+        if (status === "OPEN") action = `<button class="btn btn-sm btn-primary" type="button" data-id="${a.id}">선택</button>`;
+        else if (isChosen) action = `<span class="pill ok">확정</span>`;
+        else if (status === "CONFIRMED") action = `<span class="pill">미선택</span>`;
+        return `
+          <div class="applicant ${dim ? "dim" : ""}">
+            <span class="avatar">${shortName(a.name)}</span>
+            <div>
+              <p class="name">${a.name}<span class="pill ${a.store === "성수점" ? "store-a" : "store-b"}">${a.store}</span></p>
+              <p class="meta num">${a.appliedAt} 지원 · 이번 주 ${a.week}시간${a.helper ? ` · 헬퍼 ${a.helper}회` : ""}</p>
+              <p class="reason"><span class="ai-mark">AI</span>${escapeHTML(a.reason)}</p>
+            </div>
+            ${action}
+          </div>`;
+      }).join("") : `<p class="empty">아직 지원한 사람이 없어요</p>`;
+    }
+
+    const selectSheet = document.getElementById("selectSheet");
+    const cancelSheet = document.getElementById("cancelSheet");
+
+    document.getElementById("applicants").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-id]");
+      if (!b) return;
+      pending = shift.applicants.find((a) => a.id === b.dataset.id);
+      document.getElementById("selectTitle").textContent = `${pending.name}님으로 확정할까요?`;
+      document.getElementById("selectDesc").textContent =
+        `${fmtDate(shift.date)} ${shift.start}–${shift.end} ${shift.store} 근무에 바로 배정돼요. 나머지 지원자에게는 다른 분으로 정해졌다고 알려드려요.`;
+      selectSheet.showModal();
+    });
+
+    selectSheet.addEventListener("close", () => {
+      if (selectSheet.returnValue !== "yes") return;
+      chosen = pending; status = "CONFIRMED"; render();
+      toast(`${chosen.name}님으로 확정했어요`);
+    });
+
+    document.getElementById("cancelBtn").addEventListener("click", () => cancelSheet.showModal());
+    cancelSheet.addEventListener("close", () => {
+      if (cancelSheet.returnValue !== "yes") return;
+      status = "CANCELED"; render();
+      toast("급구를 취소했어요");
+    });
+
+    render();
+  </script>
+</body>
+</html>

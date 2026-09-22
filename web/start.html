@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>시작하기 | 대타구함</title>
+  <link rel="stylesheet" href="css/common.css">
+  <style>
+    .hello { position:relative; overflow:hidden; padding: 62px 24px 30px; background:#edf4f2; }
+    .hello::after { display:none; }
+    .hello::before { content:"대타구함"; display:block; color:var(--accent); font-size:11px; font-weight:850; letter-spacing:.14em; margin-bottom:12px; }
+    .hello h1 { font-size:30px; font-weight:850; letter-spacing:-.045em; }
+    .hello p { color: var(--ink-2); margin-top: 7px; }
+    .path { display: flex; align-items: center; gap: 14px; padding: 20px 18px; transition:transform .18s, box-shadow .18s; }
+    .path:hover { transform:translateY(-2px); box-shadow:var(--shadow-md); }
+    .path .ic { width: 50px; height: 50px; border-radius: 17px; display: grid; place-items: center; font-size: 22px; flex: none; }
+    .path .grow { flex: 1; }
+    .path b { font-size: 16px; }
+    .path small { display: block; color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <div class="phone no-tab">
+    <div class="hello">
+      <h1 id="hello">반가워요!</h1>
+      <p>어떻게 시작할까요?</p>
+    </div>
+    <main class="content">
+      <a class="card path" href="worker/join.html">
+        <span class="ic" style="background:var(--accent-soft)" aria-hidden="true">🔑</span>
+        <span class="grow"><b>초대코드로 매장 참여</b><small>알바생·점장 · 매장에서 받은 코드를 입력해요</small></span>
+        <span class="chev" aria-hidden="true">›</span>
+      </a>
+      <a class="card path" href="owner/store-new.html">
+        <span class="ic" style="background:var(--warn-soft)" aria-hidden="true">🏪</span>
+        <span class="grow"><b>내 매장 만들기</b><small>사장님 · 만들면 바로 초대코드가 생겨요</small></span>
+        <span class="chev" aria-hidden="true">›</span>
+      </a>
+      <a class="btn btn-text btn-block" href="worker/home.html">나중에 할게요</a>
+    </main>
+  </div>
+  <script src="js/common.js"></script>
+  <script>
+    const userName = params.get("name");
+    if (userName) document.getElementById("hello").textContent = `${userName}님, 반가워요!`;
+  </script>
+</body>
+</html>

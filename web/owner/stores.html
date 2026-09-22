@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>내 매장 | 사장</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .store-card { display: grid; gap: 14px; }
+    .store-card h2 { font-size: 19px; font-weight: 800; }
+    .stat.alert b { color: var(--warn); }
+    .stats.two { grid-template-columns:repeat(2,1fr); }
+    .store-policy { color:var(--muted); font-size:12px; font-weight:700; }
+    .store-alert { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; background:var(--accent-soft); border-radius:12px; color:inherit; }
+    .store-alert small { display:block; color:var(--accent); font-size:11.5px; font-weight:800; margin-bottom:2px; }
+    .store-alert b { display:block; font-size:13.5px; }
+    .store-alert span { flex:none; color:var(--accent); font-size:12px; font-weight:800; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <header class="topbar">
+      <h1>내 매장</h1>
+      <span class="account-meta"><b>김효주 사장님</b><small>2개 매장 운영</small></span>
+      <a class="icon-btn" href="../worker/notifications.html?role=owner" aria-label="알림">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        <span class="dot"></span>
+      </a>
+    </header>
+
+    <main class="content">
+      <p class="help num" style="padding:0 4px">9월 15일 화요일 · 매장 2곳</p>
+
+      <section class="card store-card">
+        <div class="row between">
+          <h2>성수점</h2><span class="store-policy">점장 승인 방식</span>
+        </div>
+        <div class="stats two">
+          <div class="stat"><small>오늘 근무</small><b>3명</b></div>
+          <div class="stat alert"><small>확인할 요청</small><b>3건</b></div>
+        </div>
+        <a class="store-alert" href="open-shift.html?store=A">
+          <div><small>미배정 근무</small><b class="num">9/18(금) 16:00–22:00 · 마감</b></div><span>급구 올리기 ›</span>
+        </a>
+        <div class="btn-row">
+          <a class="btn" href="../manager/today.html?role=owner&store=A">오늘 현황</a>
+          <a class="btn" href="../manager/staff.html?role=owner&store=A">직원 관리</a>
+        </div>
+        <a class="btn btn-primary btn-block" href="../manager/schedule-bulk.html?role=owner&store=A">근무표 짜기</a>
+        <a class="btn btn-text btn-block" href="../manager/approvals.html?role=owner&store=A">승인할 요청 3건 보기 ›</a>
+      </section>
+
+      <section class="card store-card">
+        <div class="row between">
+          <h2>건대점</h2><span class="store-policy">자동 확정 · 점장 없음</span>
+        </div>
+        <div class="stats two">
+          <div class="stat"><small>오늘 근무</small><b>2명</b></div>
+          <div class="stat"><small>모집 중</small><b>1건</b></div>
+        </div>
+        <a class="store-alert" href="open-shift-detail.html?id=g1">
+          <div><small>급구 지원 현황</small><b class="num">9/29(화) 12:00–20:00 · 지원자 2명</b></div><span>고르기 ›</span>
+        </a>
+        <div class="btn-row">
+          <a class="btn" href="../manager/today.html?role=owner&store=B">오늘 현황</a>
+          <a class="btn" href="../manager/staff.html?role=owner&store=B">직원 관리</a>
+        </div>
+        <a class="btn btn-primary btn-block" href="../manager/schedule-bulk.html?role=owner&store=B">근무표 짜기</a>
+      </section>
+
+      <span class="api-tag">GET /stores/my</span>
+
+      <a class="btn btn-block" href="store-new.html">+ 매장 만들기</a>
+    </main>
+
+    <nav class="tabbar" data-role="owner" data-active="stores" data-counts="approvals:3"></nav>
+  </div>
+
+  <script src="../js/common.js"></script>
+</body>
+</html>

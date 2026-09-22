@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>매장 만들기 | 사장</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .code { font-family: var(--mono); font-size: 30px; font-weight: 800; letter-spacing: .18em; }
+  </style>
+</head>
+<body>
+  <div class="phone no-tab">
+    <header class="topbar sub">
+      <a class="icon-btn" href="stores.html" aria-label="뒤로"><span id="backIcon"></span></a>
+      <h1>매장 만들기</h1>
+    </header>
+
+    <main class="content" id="formView">
+      <p class="help" style="padding:0 4px">매장은 초대코드로만 들어올 수 있는 비공개 공간이에요. 만들면 바로 초대코드가 생겨요.</p>
+      <section class="card stack" style="gap:14px">
+        <div class="field">
+          <label for="name">매장 이름</label>
+          <input class="input" id="name" placeholder="예: 왕십리점">
+        </div>
+        <div class="field">
+          <label for="category">업종</label>
+          <select class="select" id="category">
+            <option value="">선택해 주세요</option>
+            <option>카페</option><option>아이스크림·디저트</option><option>편의점</option><option>음식점</option><option>기타</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="address">주소 <span class="muted">(선택)</span></label>
+          <input class="input" id="address" placeholder="예: 서울 성동구 왕십리로 00">
+        </div>
+        <p class="error-text" id="formError" hidden></p>
+      </section>
+      <div class="bottom-bar">
+        <button class="btn btn-primary btn-block" type="button" id="submitBtn">매장 만들기</button>
+        <span class="api-tag" style="margin-top:6px">POST /stores</span>
+      </div>
+    </main>
+
+    <main class="content" id="doneView" hidden>
+      <section class="card stack" style="gap:10px;margin-top:8px">
+        <span class="pill ok" style="width:fit-content">매장 준비 완료</span>
+        <p style="font-size:20px;font-weight:800" id="doneTitle"></p>
+        <p class="muted">직원에게 초대코드를 알려주세요. 참여 신청이 오면 승인해야 들어올 수 있어요.</p>
+        <p class="code" id="code"></p>
+        <button class="btn btn-primary btn-block" type="button" id="copyBtn">초대코드 복사</button>
+      </section>
+      <a class="btn btn-block" href="stores.html">내 매장으로</a>
+    </main>
+  </div>
+
+  <script src="../js/common.js"></script>
+  <script>
+    document.getElementById("backIcon").outerHTML = BACK_ICON;
+
+    document.getElementById("submitBtn").addEventListener("click", () => {
+      const name = document.getElementById("name").value.trim();
+      const err = document.getElementById("formError");
+      let msg = "";
+      if (!name) msg = "매장 이름을 입력해 주세요.";
+      else if (!document.getElementById("category").value) msg = "업종을 골라주세요.";
+      if (msg) { err.textContent = msg; err.hidden = false; return; }
+
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      const code = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+      document.getElementById("doneTitle").textContent = `${name} 매장을 만들었어요`;
+      document.getElementById("code").textContent = code;
+      document.getElementById("formView").hidden = true;
+      document.getElementById("doneView").hidden = false;
+    });
+
+    document.getElementById("copyBtn").addEventListener("click", async () => {
+      const code = document.getElementById("code").textContent;
+      try { await navigator.clipboard.writeText(code); } catch (e) { /* 복사 불가 환경 */ }
+      toast(`초대코드 ${code}를 복사했어요`);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>대타 요청 | 알바생</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .summary .date { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+    .summary .time { font-size: 16px; color: var(--ink-2); margin-top: 2px; }
+    .info { display: grid; grid-template-columns: 72px 1fr; gap: 8px 12px; font-size: 14px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line-2); }
+    .info dt { color: var(--muted); }
+    .info dd { margin: 0; }
+
+    .applicant { display: grid; grid-template-columns:44px minmax(0,1fr) auto; align-items:start; gap: 12px; padding: 17px 18px; border-top: 1px solid var(--line-2); }
+    .applicant:first-child { border-top: 0; }
+    .applicant .grow { flex: 1; min-width: 0; }
+    .applicant .avatar { width:44px; height:44px; }
+    .applicant .name { font-size:18px; font-weight:850; letter-spacing:-.02em; }
+    .application-meta { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:9px; }
+    .application-meta div { padding:8px 9px; border-radius:9px; background:var(--bg); }
+    .application-meta small { display:block; color:var(--muted); font-size:10.5px; margin-bottom:1px; }
+    .application-meta strong { display:block; color:var(--ink-2); font-size:13px; }
+    .application-meta div:first-child strong { color:var(--accent); }
+    .applicant .help-line { font-size: 12px; color: var(--muted); margin-top: 8px; line-height:1.4; }
+    .applicant .help-line b { color: var(--accent); }
+    .applicant > .btn, .applicant > .pill { align-self:center; }
+    .offer-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .offer-chips span { padding:4px 8px; border-radius:8px; background:var(--accent-soft); color:var(--accent); font-size:12px; font-weight:700; }
+    .accept-dates { margin-top:10px; font-size:13px; color:var(--ink-2); }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <header class="topbar sub">
+      <a class="icon-btn" href="home.html" aria-label="뒤로">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+      </a>
+      <h1 id="pageTitle">대타 요청</h1>
+      <span class="account-meta"><b>한석휘</b><small>건대점</small></span>
+    </header>
+
+    <main class="content">
+      <!-- 요약 -->
+      <section class="card summary">
+        <div class="row between">
+          <p class="date num" id="reqDate">9/19(토)</p>
+          <span class="pill open" id="statusPill">모집 중</span>
+        </div>
+        <p class="time num" id="reqTime">14:00–22:00 · 건대점 마감</p>
+        <dl class="info" id="reqInfo">
+          <dt>공개</dt><dd>건대점 직원 모두</dd>
+          <dt>승인</dt><dd>점장님 승인 후 확정</dd>
+          <dt>사유</dt><dd>가족 일정이 생겼어요</dd>
+        </dl>
+        <span class="api-tag" style="margin-top:12px">GET /requests/{id}</span>
+      </section>
+
+      <!-- 상태 안내 -->
+      <div class="notice" id="notice" hidden></div>
+
+      <!-- 지원자 -->
+      <h2 class="section-title" id="listTitle">지원한 사람 <small>3명</small></h2>
+      <section class="card tight" id="applicants"></section>
+      <span class="api-tag">PUT /requests/{id}/selection</span>
+
+      <button class="btn btn-text btn-block" type="button" id="cancelBtn">요청 취소</button>
+    </main>
+
+    <nav class="tabbar" data-role="worker" data-active="home"></nav>
+  </div>
+
+  <dialog class="sheet" id="selectSheet">
+    <form method="dialog">
+      <div class="sheet-body">
+        <h3 id="selectTitle"></h3>
+        <div id="offerPick" class="stack" hidden>
+          <p class="help">이 사람이 내놓은 근무 중 실제로 바꿀 근무를 하나 골라주세요.</p>
+          <div class="choices" id="offerChoices" role="radiogroup" aria-label="바꿀 근무"></div>
+          <p class="error-text" id="offerError" hidden>바꿀 근무를 하나 골라주세요.</p>
+        </div>
+        <p>점장님이 승인하면 근무표와 두 사람의 캘린더에 바로 반영돼요.</p>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn" value="no">취소</button>
+        <button class="btn btn-primary" value="yes" id="selectYes">선택하기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="cancelSheet">
+    <form method="dialog">
+      <div class="sheet-body">
+        <h3>요청을 취소할까요?</h3>
+        <p id="cancelDesc">지원자에게 취소됐다고 알려드려요. 9/19 근무는 그대로 한석휘님이 해요.</p>
+        <span class="api-tag">PUT /requests/{id}/cancel</span>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn" value="no">돌아가기</button>
+        <button class="btn btn-danger" value="yes">요청 취소</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="../js/common.js"></script>
+  <script>
+    // 예시 데이터: gave = 이 사람이 나를 대타해준 횟수, got = 내가 이 사람을 대타해준 횟수
+    // ?type=EXCHANGE 면 내가 올린 공개 교대 요청 예시 (지원자가 내놓은 근무 offers 중 하나를 골라 확정)
+    const isEx = params.get("type") === "EXCHANGE";
+    const applicants = isEx ? [
+      { id: "minhyeok", name: "배민혁", gave: 3, got: 1, week: 12, appliedAt: "14:05",
+        offers: [{ id: 201, label: "9/22(화) 14:00–22:00 마감" }] },
+      { id: "yeri", name: "권예리", gave: 1, got: 2, week: 18, appliedAt: "13:10",
+        offers: [{ id: 205, label: "9/26(토) 10:00–16:00 오픈" }, { id: 208, label: "10/1(목) 16:00–22:00 마감" }] },
+      { id: "suyeon", name: "인수연", gave: 0, got: 0, week: 6, appliedAt: "12:02",
+        offers: [{ id: 207, label: "10/1(목) 10:00–16:00 오픈" }] },
+    ] : [
+      { id: "minhyeok", name: "배민혁", gave: 3, got: 1, week: 12, appliedAt: "13:20" },
+      { id: "yeri", name: "권예리", gave: 1, got: 2, week: 18, appliedAt: "12:48" },
+      { id: "suyeon", name: "인수연", gave: 0, got: 0, week: 6, appliedAt: "11:32" },
+    ];
+    let chosenOffer = null;
+
+    if (isEx) {
+      document.title = "교대 요청 | 알바생";
+      document.getElementById("pageTitle").textContent = "교대 요청";
+      document.getElementById("reqDate").textContent = "9/23(수)";
+      document.getElementById("reqTime").textContent = "14:00–22:00 · 건대점 마감";
+      document.getElementById("reqInfo").innerHTML = `
+        <dt>공개</dt><dd>건대점 직원 중 날짜가 맞는 사람</dd>
+        <dt>대신 가능</dt><dd class="num">9/22(화) · 9/26(토) · 10/1(목)</dd>
+        <dt>승인</dt><dd>점장님 승인 후 확정</dd>`;
+    }
+
+    let status = "OPEN";   // OPEN → PENDING / CANCELED
+    if (isEx) document.getElementById("cancelDesc").textContent = "지원자에게 취소됐다고 알려드려요. 9/23 근무는 그대로 한석휘님이 해요.";
+    let chosen = null;
+
+    function helpLine(a) {
+      if (!a.gave && !a.got) return "아직 주고받은 대타가 없어요";
+      return `나를 <b>${a.gave}번</b> 도와줬어요 · 내가 ${a.got}번 도와줬어요`;
+    }
+
+    function render() {
+      const pill = document.getElementById("statusPill");
+      const notice = document.getElementById("notice");
+      const cancelBtn = document.getElementById("cancelBtn");
+
+      if (status === "OPEN") {
+        pill.className = "pill open"; pill.textContent = "모집 중";
+        notice.hidden = true;
+      } else if (status === "PENDING") {
+        pill.className = "pill wait"; pill.textContent = "승인 대기";
+        notice.hidden = false; notice.className = "notice";
+        notice.textContent = isEx
+          ? `${chosen.name}님의 ${chosenOffer.label} 근무와 바꾸기로 했어요. 점장님 승인을 기다리는 중이에요.`
+          : `${chosen.name}님을 선택했어요. 점장님 승인을 기다리는 중이에요.`;
+      } else {
+        pill.className = "pill"; pill.textContent = "취소됨";
+        notice.hidden = false; notice.className = "notice gray";
+        notice.textContent = "요청을 취소했어요.";
+      }
+      cancelBtn.hidden = status === "CANCELED";
+
+      const list = status === "PENDING" ? [chosen] : applicants;
+      document.getElementById("listTitle").innerHTML = status === "PENDING"
+        ? "선택한 사람"
+        : `지원한 사람 <small>최근 신청순 · ${applicants.length}명</small>`;
+
+      document.getElementById("applicants").innerHTML = list.map((a) => `
+        <div class="applicant">
+          <span class="avatar">${shortName(a.name)}</span>
+          <div class="grow">
+            <p class="name">${a.name}</p>
+            <div class="application-meta num"><div><small>신청 시간</small><strong>${a.appliedAt}</strong></div><div><small>이번 주 근무</small><strong>${a.week}시간</strong></div></div>
+            ${isEx ? `<div class="offer-chips">${(status === "PENDING" ? [chosenOffer] : a.offers).map((o) => `<span class="num">${o.label}</span>`).join("")}</div>` : ""}
+            <p class="help-line">${helpLine(a)}</p>
+          </div>
+          ${status === "OPEN" ? `<button class="btn btn-sm btn-primary" type="button" data-id="${a.id}">선택</button>` : ""}
+          ${status === "PENDING" ? `<span class="pill ok">선택함</span>` : ""}
+        </div>`).join("");
+    }
+
+    const selectSheet = document.getElementById("selectSheet");
+    const cancelSheet = document.getElementById("cancelSheet");
+    let pending = null;
+
+    document.getElementById("applicants").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-id]");
+      if (!b) return;
+      pending = applicants.find((a) => a.id === b.dataset.id);
+      document.getElementById("selectTitle").textContent = isEx ? `${pending.name}님과 교대할까요?` : `${pending.name}님에게 맡길까요?`;
+      document.getElementById("offerPick").hidden = !isEx;
+      document.getElementById("offerError").hidden = true;
+      if (isEx) {
+        document.getElementById("offerChoices").innerHTML = pending.offers.map((o, i) => `
+          <label class="choice"><input type="radio" name="offer" value="${o.id}" ${pending.offers.length === 1 ? "checked" : ""}>
+            <span><b class="num">${o.label}</b><small>${pending.name}님 근무 · 내가 대신</small></span></label>`).join("");
+      }
+      selectSheet.showModal();
+    });
+
+    document.getElementById("selectYes").addEventListener("click", (e) => {
+      if (isEx && !document.querySelector('input[name="offer"]:checked')) {
+        e.preventDefault();
+        document.getElementById("offerError").hidden = false;
+      }
+    });
+
+    selectSheet.addEventListener("close", () => {
+      if (selectSheet.returnValue !== "yes") return;
+      if (isEx) {
+        const id = Number(document.querySelector('input[name="offer"]:checked').value);
+        chosenOffer = pending.offers.find((o) => o.id === id);
+      }
+      chosen = pending; status = "PENDING"; render();
+      toast(`${chosen.name}님을 선택했어요`);
+    });
+
+    document.getElementById("cancelBtn").addEventListener("click", () => cancelSheet.showModal());
+    cancelSheet.addEventListener("close", () => {
+      if (cancelSheet.returnValue !== "yes") return;
+      status = "CANCELED"; render();
+      toast("요청을 취소했어요");
+    });
+
+    render();
+  </script>
+</body>
+</html>

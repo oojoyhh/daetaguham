@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>로그인 | 대타구함</title>
+  <link rel="stylesheet" href="css/common.css">
+  <style>
+    .brand { padding: 72px 24px 28px; }
+    .brand .mark { width: 52px; height: 52px; border-radius: 16px; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 22px; font-weight: 800; }
+    .brand h1 { font-size: 28px; font-weight: 800; letter-spacing: -.02em; margin-top: 20px; }
+    .brand p { color: var(--ink-2); margin-top: 6px; }
+    .demo { font-size: 12.5px; color: var(--muted); background: var(--surface); border-radius: 14px; padding: 12px 14px; line-height: 1.7; }
+    .demo b { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <div class="phone no-tab">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">대</div>
+      <h1>대타구함</h1>
+      <p>전화 돌리지 않고, 근무 바꾸기</p>
+    </div>
+
+    <main class="content">
+      <form class="stack" id="loginForm" novalidate style="gap:12px">
+        <div class="field">
+          <label for="phone">휴대폰 번호</label>
+          <input class="input" id="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="010-0000-0000">
+        </div>
+        <div class="field">
+          <label for="pw">비밀번호</label>
+          <input class="input" id="pw" type="password" autocomplete="current-password" placeholder="비밀번호">
+        </div>
+        <p class="error-text" id="loginError" hidden></p>
+        <button class="btn btn-primary btn-block" type="submit">로그인</button>
+        <span class="api-tag">POST /auth/login</span>
+      </form>
+
+      <button class="btn btn-text btn-block" type="button" id="signupBtn">처음이에요 · 회원가입</button>
+
+      <div class="demo">
+        시연용 계정 (비밀번호 아무거나 4자 이상)<br>
+        알바생 <b>010-1111-2222</b> · 점장 <b>010-3333-4444</b><br>
+        사장 <b>010-5555-6666</b>
+      </div>
+    </main>
+  </div>
+
+  <dialog class="sheet" id="signupSheet">
+    <form method="dialog" id="signupForm" novalidate>
+      <div class="sheet-body">
+        <h3>회원가입</h3>
+        <div class="field">
+          <label for="suName">이름</label>
+          <input class="input" id="suName" autocomplete="name" placeholder="실명">
+        </div>
+        <div class="field">
+          <label for="suPhone">휴대폰 번호</label>
+          <input class="input" id="suPhone" type="tel" inputmode="numeric" placeholder="010-0000-0000">
+        </div>
+        <div class="field">
+          <label for="suPw">비밀번호</label>
+          <input class="input" id="suPw" type="password" autocomplete="new-password" placeholder="8자 이상">
+        </div>
+        <p class="error-text" id="signupError" hidden></p>
+        <span class="api-tag">POST /auth/signup</span>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn" type="button" id="signupClose">닫기</button>
+        <button class="btn btn-primary" type="submit">가입하기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="js/common.js"></script>
+  <script>
+    const ACCOUNTS = {
+      "01011112222": "worker/home.html",
+      "01033334444": "manager/today.html",
+      "01055556666": "owner/stores.html",
+    };
+
+    ["phone", "suPhone"].forEach((id) => {
+      const el = document.getElementById(id);
+      el.addEventListener("input", () => (el.value = formatPhone(el.value)));
+    });
+
+    document.getElementById("loginForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const digits = document.getElementById("phone").value.replace(/\D/g, "");
+      const pw = document.getElementById("pw").value;
+      const err = document.getElementById("loginError");
+
+      if (digits.length !== 11 || pw.length < 4) {
+        err.textContent = "휴대폰 번호 11자리와 비밀번호를 입력해 주세요.";
+        err.hidden = false;
+        return;
+      }
+      if (!ACCOUNTS[digits]) {
+        err.textContent = "휴대폰 번호나 비밀번호가 맞지 않아요.";
+        err.hidden = false;
+        return;
+      }
+      location.href = ACCOUNTS[digits];
+    });
+
+    const sheet = document.getElementById("signupSheet");
+    document.getElementById("signupBtn").addEventListener("click", () => sheet.showModal());
+    document.getElementById("signupClose").addEventListener("click", () => sheet.close());
+
+    document.getElementById("signupForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const name = document.getElementById("suName").value.trim();
+      const digits = document.getElementById("suPhone").value.replace(/\D/g, "");
+      const pw = document.getElementById("suPw").value;
+      const err = document.getElementById("signupError");
+
+      let msg = "";
+      if (!name) msg = "이름을 입력해 주세요.";
+      else if (digits.length !== 11) msg = "휴대폰 번호 11자리를 입력해 주세요.";
+      else if (ACCOUNTS[digits]) msg = "이미 가입된 번호예요. 로그인해 주세요.";
+      else if (pw.length < 8) msg = "비밀번호는 8자 이상이어야 해요.";
+
+      if (msg) { err.textContent = msg; err.hidden = false; return; }
+      location.href = `start.html?name=${encodeURIComponent(name)}`;
+    });
+  </script>
+</body>
+</html>

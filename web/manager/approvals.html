@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>승인 | 점장</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .people { display: flex; align-items: center; gap: 10px; }
+    .people .arrow { color: var(--muted); font-size: 18px; }
+    .people small { display: block; font-size: 12px; color: var(--muted); }
+    .big-when { font-size: 22px; font-weight: 800; letter-spacing: -.01em; }
+    .day-name { font-size: 13px; font-weight: 700; color: var(--ink-2); margin-bottom: 4px; }
+    .check { display: flex; gap: 8px; font-size: 14px; }
+    .check .ic { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+    .check.ok .ic { background: var(--ok-soft); color: var(--ok); }
+    .check.warn .ic { background: var(--warn-soft); color: var(--warn); }
+    .decide { position: sticky; bottom: 68px; display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin: 0 -16px; padding: 20px 16px 16px; background: linear-gradient(rgba(244,245,248,0), var(--bg) 30%); }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <!-- 목록 화면 -->
+    <div id="listView">
+      <header class="topbar">
+        <h1>승인 대기</h1>
+        <span class="account-meta"><b>배스킨라빈스</b><small>성수점</small></span>
+      </header>
+      <main class="content">
+        <div class="segmented" id="storeSwitch" hidden></div>
+        <p class="help" style="padding:0 4px">직원끼리 합의한 대타·교대예요. 눌러서 확인해 주세요.</p>
+        <section class="card tight" id="list"></section>
+        <span class="api-tag">GET /stores/{id}/approvals</span>
+      </main>
+    </div>
+
+    <!-- 상세 화면 -->
+    <div id="detailView" hidden>
+      <header class="topbar sub">
+        <button class="icon-btn" type="button" id="backBtn" aria-label="목록으로">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <h1 id="detailTitle">대타 승인</h1>
+        <span class="account-meta"><b>배스킨라빈스</b><small>성수점</small></span>
+      </header>
+      <main class="content" id="detail"></main>
+    </div>
+
+    <nav class="tabbar" data-role="manager" data-active="approvals" data-role-param data-counts="approvals:3"></nav>
+  </div>
+
+  <dialog class="sheet" id="rejectSheet">
+    <form method="dialog">
+      <div class="sheet-body">
+        <h3>반려할까요?</h3>
+        <p>요청은 다시 모집 중으로 돌아가요. 사유는 요청자에게 보여요.</p>
+        <label class="help" for="reason">반려 사유 (필수)</label>
+        <textarea class="textarea" id="reason" maxlength="200" placeholder="예: 이번 주 근무가 너무 많아요. 다른 분으로 부탁해요."></textarea>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn" value="no">취소</button>
+        <button class="btn btn-danger" value="yes" id="rejectConfirm" disabled>반려하기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="../js/common.js"></script>
+  <script>
+    // 예시 데이터 (GET /stores/{id}/approvals 응답이라고 가정). 사장은 ?role=owner로 매장을 전환해요.
+    const STORE_APPROVALS = { A: [
+      {
+        id: 3021, type: "대타", from: "박유진", to: "김민", when: "9/19(토) 14:00–22:00",
+        days: [{ name: "9/19(토)", rows: [
+          { who: "박유진", s: 14, e: 22, kind: "gone" },
+          { who: "김민", s: 14, e: 22, kind: "new" },
+        ] }],
+        checks: [
+          { k: "ok", t: "김민님은 그 시간에 다른 근무가 없어요" },
+          { k: "ok", t: "김민님 이번 주 12시간 → 20시간" },
+        ],
+        status: "PENDING",
+      },
+      {
+        id: 3018, type: "교대", from: "정재웅", to: "김민", when: "9/21(월) ⇄ 9/24(목) 오픈",
+        days: [
+          { name: "9/21(월)", rows: [{ who: "정재웅", s: 10, e: 16, kind: "gone" }, { who: "김민", s: 10, e: 16, kind: "new" }] },
+          { name: "9/24(목)", rows: [{ who: "김민", s: 10, e: 16, kind: "gone" }, { who: "정재웅", s: 10, e: 16, kind: "new" }] },
+        ],
+        checks: [{ k: "ok", t: "두 사람 모두 바뀐 날에 다른 근무가 없어요" }],
+        status: "PENDING",
+      },
+      {
+        id: 3024, type: "대타", from: "이진호", to: "정재웅", when: "9/27(일) 16:00–22:00",
+        days: [{ name: "9/27(일)", rows: [
+          { who: "이진호", s: 16, e: 22, kind: "gone" },
+          { who: "정재웅", s: 16, e: 22, kind: "new" },
+        ] }],
+        checks: [
+          { k: "ok", t: "정재웅님은 그 시간에 다른 근무가 없어요" },
+          { k: "warn", t: "정재웅님 이번 주 28시간 → 34시간 (30시간 넘음)" },
+        ],
+        status: "PENDING",
+      },
+    ], B: [] };
+    let current = null;
+    let storeKey = mountStoreSwitch((k) => { storeKey = k; approvals = STORE_APPROVALS[k]; renderList(); show("list"); });
+    if (params.get("role") !== "owner") storeKey = "A";
+    let approvals = STORE_APPROVALS[storeKey];
+
+    const STATUS_PILL = {
+      PENDING: `<span class="pill wait">대기</span>`,
+      APPROVED: `<span class="pill ok">승인</span>`,
+      REJECTED: `<span class="pill bad">반려</span>`,
+    };
+
+    function renderList() {
+      document.getElementById("list").innerHTML = approvals.length === 0
+        ? `<p class="empty">${storeKey === "B" ? "건대점은 합의하면 바로 확정되는 매장이라 승인할 요청이 없어요" : "승인할 요청이 없어요"}</p>`
+        : approvals.map((a) => `
+        <button class="list-item" type="button" data-id="${a.id}">
+          <div class="grow">
+            <p class="title">${a.type} · ${a.from} ${a.type === "교대" ? "⇄" : "→"} ${a.to}</p>
+            <p class="desc num">${a.when}</p>
+          </div>
+          ${STATUS_PILL[a.status]}<span class="chev" aria-hidden="true">›</span>
+        </button>`).join("");
+      const n = Object.values(STORE_APPROVALS).flat().filter((a) => a.status === "PENDING").length;
+      document.querySelectorAll(".account-meta small").forEach((el) => {
+        if (params.get("role") === "owner") el.textContent = `${OWNER_STORE_NAMES[storeKey]} 승인`;
+      });
+      const count = document.querySelector('[data-count-for="approvals"]');
+      if (count) { count.textContent = n; count.hidden = n === 0; }
+    }
+
+    // 사장이 들어오면 (?role=owner) 헤더 계정 정보를 사장 화면에 맞게 표시
+    if (params.get("role") === "owner") {
+      document.querySelectorAll(".account-meta").forEach((meta) => {
+        meta.innerHTML = "<b>김효주 사장님</b><small>2개 매장 운영</small>";
+      });
+      document.title = "승인 | 사장";
+    }
+
+    function timeline(day) {
+      const min = Math.min(...day.rows.map((r) => r.s));
+      const start = Math.max(8, Math.min(min, 10));
+      const hours = Array.from({ length: 12 }, (_, i) => start + i);
+      return `
+        <div>
+          <p class="day-name">${day.name}</p>
+          <div class="tl">
+            <div class="tl-hours"><span></span>${hours.map((h) => `<span>${h}</span>`).join("")}</div>
+            ${day.rows.map((r) => `
+              <div class="tl-row">
+                <span class="tl-who">${r.who}</span>
+                <div class="tl-blk ${r.kind}" style="grid-column:${r.s - start + 2} / ${Math.min(r.e, start + 12) - start + 2}">${pad(r.s)}–${pad(r.e)}</div>
+              </div>`).join("")}
+          </div>
+        </div>`;
+    }
+
+    function renderDetail() {
+      const a = current;
+      document.getElementById("detailTitle").textContent = `${a.type} 승인`;
+
+      let bottom;
+      if (a.status === "PENDING") {
+        bottom = `<div class="decide">
+                    <button class="btn btn-danger" type="button" id="rejectBtn">반려</button>
+                    <button class="btn btn-primary" type="button" id="approveBtn">승인</button>
+                  </div>
+                  <span class="api-tag">PUT /requests/{id}/approval</span>`;
+      } else if (a.status === "APPROVED") {
+        bottom = `<div class="notice ok">승인했어요. 근무표와 두 사람의 캘린더에 반영됐어요.</div>`;
+      } else {
+        bottom = `<div class="notice gray">반려했어요. 사유: ${escapeHTML(a.reason)}</div>`;
+      }
+
+      document.getElementById("detail").innerHTML = `
+        <section class="card stack" style="gap:14px">
+          <div class="people">
+            <span class="avatar">${shortName(a.from)}</span>
+            <div><b>${a.from}</b><small>요청</small></div>
+            <span class="arrow" aria-hidden="true">${a.type === "교대" ? "⇄" : "→"}</span>
+            <span class="avatar">${shortName(a.to)}</span>
+            <div><b>${a.to}</b><small>${a.type === "교대" ? "교대 상대" : "대신 근무"}</small></div>
+          </div>
+          <p class="big-when num">${a.when}</p>
+        </section>
+
+        <h2 class="section-title">근무표가 이렇게 바뀌어요</h2>
+        <section class="card stack" style="gap:18px">${a.days.map(timeline).join("")}</section>
+
+        <section class="card stack">
+          ${a.checks.map((c) => `<p class="check ${c.k}"><span class="ic">${c.k === "ok" ? "✓" : "!"}</span>${escapeHTML(c.t)}</p>`).join("")}
+        </section>
+
+        ${bottom}`;
+    }
+
+    function show(view) {
+      document.getElementById("listView").hidden = view !== "list";
+      document.getElementById("detailView").hidden = view !== "detail";
+      window.scrollTo(0, 0);
+    }
+
+    document.getElementById("list").addEventListener("click", (e) => {
+      const item = e.target.closest("[data-id]");
+      if (!item) return;
+      current = approvals.find((a) => a.id === Number(item.dataset.id));
+      renderDetail();
+      show("detail");
+    });
+
+    document.getElementById("backBtn").addEventListener("click", () => { renderList(); show("list"); });
+
+    const rejectSheet = document.getElementById("rejectSheet");
+    const reason = document.getElementById("reason");
+    const rejectConfirm = document.getElementById("rejectConfirm");
+
+    document.getElementById("detail").addEventListener("click", (e) => {
+      if (e.target.closest("#approveBtn")) {
+        current.status = "APPROVED";
+        renderDetail(); renderList();
+        toast("승인했어요");
+      }
+      if (e.target.closest("#rejectBtn")) {
+        reason.value = ""; rejectConfirm.disabled = true;
+        rejectSheet.showModal();
+      }
+    });
+
+    reason.addEventListener("input", () => { rejectConfirm.disabled = reason.value.trim().length < 2; });
+    rejectSheet.addEventListener("close", () => {
+      if (rejectSheet.returnValue !== "yes") return;
+      current.status = "REJECTED";
+      current.reason = reason.value.trim();
+      renderDetail(); renderList();
+      toast(`반려했어요. ${current.from}님에게 알려드렸어요`);
+    });
+
+    renderList();
+  </script>
+</body>
+</html>

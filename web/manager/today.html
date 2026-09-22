@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TODAY | 점장</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .date-line { font-size: 14px; color: var(--muted); padding: 0 4px; }
+    .now-line { font-size: 13px; color: var(--muted); margin-top: 10px; }
+    .message-board { padding:15px; }
+    .message-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .message-head h2 { margin:0; font-size:17px; }
+    .message-head small { display:block; margin-top:2px; color:var(--muted); font-size:11.5px; }
+    .message-line { display:grid; grid-template-columns:48px minmax(0,1fr) 28px; gap:10px; align-items:start; padding:12px 0; border-top:1px solid var(--line-2); }
+    .message-line:first-child { margin-top:9px; }
+    .message-line time { color:var(--accent); font-size:12.5px; font-weight:850; font-variant-numeric:tabular-nums; }
+    .message-line p { margin:0; color:var(--ink-2); font-size:13.5px; line-height:1.45; }
+    .message-line button { width:28px; height:28px; border:0; border-radius:8px; background:transparent; color:var(--muted); cursor:pointer; }
+    .message-empty { margin:12px 0 0; color:var(--muted); font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <header class="topbar">
+      <h1>TODAY</h1>
+      <span class="account-meta"><b>배스킨라빈스</b><small>성수점</small></span>
+      <a class="icon-btn" href="../worker/notifications.html?role=manager" aria-label="알림">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        <span class="dot"></span>
+      </a>
+    </header>
+
+    <main class="content">
+      <div class="segmented" id="storeSwitch" hidden></div>
+      <p class="date-line num">2026년 9월 15일 화요일</p>
+
+      <a class="banner" id="approvalBanner" href="approvals.html"><span class="grow"></span><span aria-hidden="true">›</span></a>
+      <a class="banner blue" id="applyBanner" href="staff.html"><span class="grow"></span><span aria-hidden="true">›</span></a>
+
+      <section class="card message-board" aria-labelledby="messageTitle">
+        <div class="message-head">
+          <div><h2 id="messageTitle">매장 전달사항</h2><small>직원 알림으로 바로 공유돼요</small></div>
+          <button class="btn btn-sm" type="button" id="messageBtn">+ 작성</button>
+        </div>
+        <div id="messageList"></div>
+        <span class="api-tag" style="margin-top:8px">GET /stores/{id}/notices · DELETE /notices/{id}</span>
+      </section>
+
+      <h2 class="section-title">오늘 근무 <small id="todayCount"></small></h2>
+      <section class="card">
+        <div class="tl" id="todayTl"></div>
+        <p class="now-line" id="nowLine"></p>
+        <span class="api-tag" style="margin-top:8px">GET /stores/{id}/shifts?date</span>
+      </section>
+
+      <h2 class="section-title">이번 주 미배정 근무 <small id="openCount"></small></h2>
+      <section class="card tight" id="openList"></section>
+    </main>
+
+    <nav class="tabbar" data-role="manager" data-active="today" data-role-param data-counts="approvals:3"></nav>
+  </div>
+
+  <dialog class="sheet" id="messageSheet">
+    <form id="messageForm" novalidate>
+      <div class="sheet-body">
+        <h3>전달사항 작성</h3>
+        <p class="muted">근무표와 분리된 매장 공지로 직원 알림에 전달돼요.</p>
+        <div class="field">
+          <label for="messageDate">관련 날짜</label>
+          <input class="input" type="date" id="messageDate" min="2026-09-15">
+        </div>
+        <div class="field">
+          <label for="messageText">내용</label>
+          <textarea class="textarea" id="messageText" maxlength="160" placeholder="예: 오후 2시 재료 입고 예정이에요. 냉동고 앞을 비워주세요."></textarea>
+        </div>
+        <p class="error-text" id="messageError" hidden></p>
+        <span class="api-tag">POST /stores/{id}/notices</span>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn" type="button" id="messageClose">닫기</button>
+        <button class="btn btn-primary" type="submit">직원에게 공유</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="../js/common.js"></script>
+  <script>
+    // 매장별 예시 데이터. 사장은 ?role=owner로 두 매장을 전환해서 봐요.
+    const STORE_DATA = {
+      A: {
+        name: "성수점",
+        approvals: { n: 3, sub: "대타 2 · 교대 1" },
+        apply: { n: 1, sub: "한석휘님이 성수점에 참여를 신청했어요" },
+        rows: [{ who: "김민", s: 10, e: 16, band: "오픈" }, { who: "박유진", s: 12, e: 18, band: "미들" }, { who: "이진호", s: 16, e: 22, band: "마감" }],
+        now: "지금은 김민님, 박유진님이 근무 중이에요.",
+        open: [{ date: "2026-09-18", time: "16:00–22:00", band: "마감" }],
+      },
+      B: {
+        name: "건대점",
+        approvals: { n: 0, sub: "합의하면 바로 확정되는 매장이에요" },
+        apply: { n: 0, sub: "" },
+        rows: [{ who: "한석휘", s: 10, e: 16, band: "오픈" }, { who: "인수연", s: 16, e: 22, band: "마감" }],
+        now: "지금은 한석휘님이 근무 중이에요.",
+        open: [{ date: "2026-09-19", time: "16:00–22:00", band: "마감" }],
+      },
+    };
+    const isOwner = params.get("role") === "owner";
+    let STORE_KEY = "A";
+
+    function renderStore() {
+      const d = STORE_DATA[STORE_KEY];
+      document.querySelectorAll(".account-meta small").forEach((el) => (el.textContent = isOwner ? `${d.name} 오늘` : d.name));
+
+      const ap = document.getElementById("approvalBanner");
+      ap.hidden = !d.approvals.n;
+      ap.href = `approvals.html${isOwner ? `?role=owner&store=${STORE_KEY}` : ""}`;
+      ap.querySelector(".grow").innerHTML = `승인할 근무 변경 ${d.approvals.n}건<small>${d.approvals.sub}</small>`;
+
+      const aply = document.getElementById("applyBanner");
+      aply.hidden = !d.apply.n;
+      aply.href = `staff.html${isOwner ? `?role=owner&store=${STORE_KEY}` : ""}`;
+      aply.querySelector(".grow").innerHTML = `참여 신청 ${d.apply.n}명<small>${d.apply.sub}</small>`;
+
+      const start = 10;
+      document.getElementById("todayCount").textContent = `${d.rows.length}명`;
+      document.getElementById("nowLine").textContent = d.now;
+      document.getElementById("todayTl").innerHTML = `
+        <div class="tl-hours"><span></span>${Array.from({ length: 12 }, (_, i) => `<span>${start + i}</span>`).join("")}</div>
+        ${d.rows.map((r) => `
+          <div class="tl-row">
+            <span class="tl-who">${r.who}</span>
+            <div class="tl-blk band-${bandNo(r.band)}" style="grid-column:${r.s - start + 2} / ${r.e - start + 2}">${pad(r.s)}–${pad(r.e)}</div>
+          </div>`).join("")}`;
+
+      document.getElementById("openCount").textContent = `${d.open.length}개`;
+      document.getElementById("openList").innerHTML = d.open.length ? d.open.map((o) => `
+        <div class="list-item" style="cursor:default">
+          <div class="grow">
+            <p class="title num">${fmtDate(o.date)} ${o.time} ${o.band}</p>
+            <p class="desc">담당자를 지정하거나 ${isOwner ? "급구로 사람을 구하세요" : "사장님께 급구를 요청하세요"}</p>
+          </div>
+          <a class="btn btn-sm" href="${isOwner ? `../owner/open-shift.html?store=${STORE_KEY}` : `schedule.html?date=${o.date}`}">${isOwner ? "급구 올리기" : "직접 채우기"}</a>
+        </div>`).join("") : `<p class="empty">비어 있는 근무가 없어요</p>`;
+
+      renderMessages();
+    }
+
+    function renderMessages() {
+      const notices = getStoreNotices(STORE_KEY)
+        .filter((notice) => notice.noticeDate >= TODAY)
+        .sort((a, b) => a.noticeDate.localeCompare(b.noticeDate));
+      document.getElementById("messageList").innerHTML = notices.length ? notices.map((notice) => `
+        <div class="message-line">
+          <time datetime="${notice.noticeDate}">${fmtDate(notice.noticeDate).split("(")[0]}</time>
+          <p>${escapeHTML(notice.content)}</p>
+          <button type="button" data-message-delete="${notice.id}" aria-label="전달사항 삭제">✕</button>
+        </div>`).join("") : `<p class="message-empty">공유한 전달사항이 아직 없어요.</p>`;
+    }
+
+    const messageSheet = document.getElementById("messageSheet");
+    document.getElementById("messageBtn").addEventListener("click", () => {
+      document.getElementById("messageDate").value = TODAY;
+      document.getElementById("messageText").value = "";
+      document.getElementById("messageError").hidden = true;
+      messageSheet.showModal();
+    });
+    document.getElementById("messageClose").addEventListener("click", () => messageSheet.close());
+    document.getElementById("messageForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const date = document.getElementById("messageDate").value;
+      const text = document.getElementById("messageText").value.trim();
+      const error = document.getElementById("messageError");
+      if (!date || !text) {
+        error.textContent = "날짜와 전달할 내용을 모두 적어주세요.";
+        error.hidden = false;
+        return;
+      }
+      const notices = getStoreNotices(STORE_KEY);
+      notices.push({ id: `notice-${Date.now()}`, noticeDate: date, content: text, createdByName: "김계원" });
+      saveStoreNotices(STORE_KEY, notices);
+      messageSheet.close();
+      renderMessages();
+      toast("직원 알림으로 전달사항을 공유했어요");
+    });
+    document.getElementById("messageList").addEventListener("click", (e) => {
+      const button = e.target.closest("[data-message-delete]");
+      if (!button) return;
+      saveStoreNotices(STORE_KEY, getStoreNotices(STORE_KEY).filter((notice) => notice.id !== button.dataset.messageDelete));
+      renderMessages();
+      toast("전달사항을 삭제했어요");
+    });
+
+    STORE_KEY = mountStoreSwitch((k) => { STORE_KEY = k; renderStore(); });
+    if (!isOwner) STORE_KEY = "A";
+    renderStore();
+  </script>
+</body>
+</html>

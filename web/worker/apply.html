@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>요청 보기 | 알바생</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .request-lead { display:flex; align-items:baseline; gap:9px; min-width:0; }
+    .request-type { color:var(--accent); font-size:12px; font-weight:900; letter-spacing:.08em; }
+    .request-who { font-size:18px; font-weight:850; letter-spacing:-.02em; }
+    .request-schedule { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:14px; padding:13px 0; border-top:1px solid var(--line-2); border-bottom:1px solid var(--line-2); }
+    .request-date { display:flex; align-items:baseline; gap:5px; }
+    .summary .date { font-size: 21px; font-weight: 850; letter-spacing: -.025em; }
+    .summary .memo { color:var(--muted); font-size:12.5px; font-weight:700; }
+    .summary .time { color:var(--accent); font-size:22px; font-weight:850; letter-spacing:-.025em; white-space:nowrap; }
+    .request-meta { margin-top:10px; color:var(--muted); font-size:13px; }
+    .info { display: grid; grid-template-columns: 72px 1fr; gap: 8px 12px; font-size: 14px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line-2); }
+    .info dt { color: var(--muted); }
+    .info dd { margin: 0; }
+    .swap-calendar { padding:16px; }
+    .calendar-head { display:grid; grid-template-columns:36px 1fr 36px; align-items:center; margin-bottom:8px; }
+    .calendar-head b { font-size:16px; text-align:center; }
+    .calendar-nav { width:36px; height:36px; border:0; border-radius:10px; background:transparent; color:var(--ink-2); font-size:23px; cursor:pointer; }
+    .calendar-help { display:block; margin-bottom:12px; color:var(--muted); font-size:11.5px; text-align:center; }
+    .calendar-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+    .calendar-grid .weekday { padding:4px 0 7px; color:var(--muted); font-size:12px; font-weight:700; text-align:center; }
+    .calendar-day { position:relative; display:grid; place-items:center; aspect-ratio:1; border:0; border-radius:10px; background:transparent; color:var(--muted); font:inherit; font-size:15px; }
+    .calendar-day.available { color:var(--ink); font-weight:800; cursor:pointer; background:var(--accent-soft); }
+    .calendar-day.available::after { content:""; position:absolute; bottom:5px; width:4px; height:4px; border-radius:50%; background:var(--accent); }
+    .calendar-day.selected { color:white; background:var(--accent); }
+    .calendar-day.selected::after { background:white; }
+    .calendar-day.blocked { color:var(--muted); text-decoration:line-through; }
+    .calendar-day.accept-only { box-shadow:inset 0 0 0 1.5px var(--line); }
+    .accept-note { padding:12px 14px; border-radius:14px; background:var(--accent-soft); color:var(--ink-2); font-size:13px; }
+    .accept-note b { color:var(--accent); }
+    .calendar-legend { display:flex; flex-wrap:wrap; justify-content:center; gap:6px 14px; margin-top:10px; color:var(--muted); font-size:11.5px; }
+    .calendar-legend i { display:inline-block; width:9px; height:9px; border-radius:3px; margin-right:4px; vertical-align:-1px; }
+    .selected-offer { margin-top:12px; padding:12px 14px; border:1px solid var(--accent); border-radius:12px; }
+    .selected-offer-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .selected-offer-head b { font-size:13px; }
+    .selected-offer-head span { color:var(--accent); font-size:12px; font-weight:800; }
+    .selected-offer-list { display:grid; gap:7px; }
+    .selected-offer-row { display:grid; grid-template-columns:1fr auto; align-items:baseline; gap:12px; font-size:13px; }
+    .selected-offer-row strong { color:var(--accent); font-size:15px; white-space:nowrap; }
+    .content { padding-bottom:150px; }
+    .apply-actions { position:fixed; left:50%; bottom:74px; z-index:19; width:min(430px,100%); transform:translateX(-50%); margin:0; padding:18px 16px 14px; background:linear-gradient(rgba(244,245,248,0),var(--bg) 26%); }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <header class="topbar sub">
+      <a class="icon-btn" href="board.html" aria-label="뒤로"><span id="backIcon"></span></a>
+      <h1 id="pageTitle">요청 보기</h1>
+      <span class="account-meta"><b>한석휘</b><small>건대점</small></span>
+    </header>
+
+    <main class="content">
+      <section class="card summary">
+        <div class="row between">
+          <div class="request-lead"><span class="request-type" id="typeLabel"></span><b class="request-who" id="requester"></b></div>
+          <span class="pill" id="statusPill"></span>
+        </div>
+        <div class="request-schedule">
+          <div class="request-date"><p class="date num" id="date"></p><span class="memo" id="memo"></span></div>
+          <p class="time num" id="time"></p>
+        </div>
+        <p class="request-meta" id="requestMeta"></p>
+        <dl class="info" id="info"></dl>
+        <span class="api-tag" style="margin-top:12px">GET /requests/{id}</span>
+      </section>
+
+      <div class="notice gray" id="relation" hidden></div>
+
+      <!-- 지원 폼 -->
+      <div id="applyBox" class="stack">
+        <div id="offerBox" class="stack" hidden>
+          <h2 class="section-title">내 어느 근무랑 바꿀까요?</h2>
+          <p class="accept-note" id="acceptNote" hidden></p>
+          <section class="card swap-calendar">
+            <div class="calendar-head"><button class="calendar-nav" type="button" id="offerPrev" aria-label="이전 달">‹</button><b id="offerMonth"></b><button class="calendar-nav" type="button" id="offerNext" aria-label="다음 달">›</button></div>
+            <small class="calendar-help" id="offerHelp">교대로 제안할 근무를 여러 개 고를 수 있어요</small>
+            <div class="calendar-grid" id="offerCalendar" aria-label="교환할 근무 날짜"></div>
+            <div class="calendar-legend" id="offerLegend" hidden>
+              <span><i style="background:var(--accent-soft)"></i>제안할 수 있는 내 근무</span>
+              <span><i style="box-shadow:inset 0 0 0 1.5px var(--line)"></i>받을 수 있지만 내 근무 없음</span>
+              <span><i style="background:var(--line-2)"></i>상대가 안 되는 날</span>
+            </div>
+            <div class="selected-offer" id="selectedOffer" hidden></div>
+          </section>
+        </div>
+        <p class="error-text" id="applyError" hidden></p>
+        <div class="bottom-bar apply-actions">
+          <button class="btn btn-primary btn-block" type="button" id="applyBtn">지원하기</button>
+          <span class="api-tag" style="margin-top:6px">POST /requests/{id}/applications</span>
+        </div>
+      </div>
+
+      <!-- 지원 완료 -->
+      <div id="appliedBox" class="stack" hidden>
+        <div class="notice ok" id="appliedText"></div>
+        <button class="btn btn-text btn-block" type="button" id="withdrawBtn">지원 철회</button>
+        <span class="api-tag">PUT /applications/{id}/withdraw</span>
+      </div>
+    </main>
+
+    <nav class="tabbar" data-role="worker" data-active="board"></nav>
+  </div>
+
+  <dialog class="sheet" id="withdrawSheet">
+    <form method="dialog">
+      <div class="sheet-body">
+        <h3>지원을 철회할까요?</h3>
+        <p>선택되기 전까지만 철회할 수 있어요. 모집 중이면 다시 지원할 수 있어요.</p>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn" value="no">돌아가기</button>
+        <button class="btn btn-danger" value="yes">철회하기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="../js/common.js"></script>
+  <script>
+    document.getElementById("backIcon").outerHTML = BACK_ICON;
+
+    const REQUESTS = {
+      g1: { type: "급구", store: "건대점", date: "2026-09-29", start: "12:00", end: "20:00", memo:"미들", from: "김효주 사장님", picker: "사장님", info: [] },
+      r1: { type: "대타", store: "건대점", date: "2026-09-21", start: "16:00", end: "22:00", memo:"마감", from: "권예리", picker: "권예리님",
+            info: [["사유", "가족 일정이 생겼어요"]], relation: "권예리님은 나를 1번, 나는 권예리님을 2번 도와줬어요" },
+      r2: { type: "교대", store: "건대점", date: "2026-09-24", start: "10:00", end: "16:00", memo:"오픈", from: "배민혁", picker: "배민혁님",
+            info: [["사유", "목요일 오전 수업이 생겼어요"]], relation: "배민혁님과는 아직 주고받은 기록이 없어요",
+            // 요청자가 달력에서 고른 "대신 일할 수 있는 날" (shift_requests → request_available_dates)
+            acceptDates: ["2026-09-16", "2026-09-22", "2026-09-27", "2026-10-08", "2026-10-12"] },
+      r3: { type: "대타", store: "건대점", date: "2026-09-28", start: "12:00", end: "18:00", memo:"미들", from: "인수연", picker: "인수연님",
+            info: [["공개", "사장님 매장 전체"]], relation: "인수연님과는 아직 주고받은 기록이 없어요" },
+    };
+    // 교대에 내놓을 수 있는 내 근무 (같은 매장 · 앞으로 · 요청 중이 아닌 근무)
+    const MY_OFFERS = [
+      { id: 107, date: "2026-09-16", start: "14:00", end: "22:00", memo: "마감" },
+      { id: 109, date: "2026-09-20", start: "10:00", end: "16:00", memo: "오픈" },
+      { id: 112, date: "2026-09-27", start: "10:00", end: "16:00", memo: "오픈" },
+      { id: 114, date: "2026-10-03", start: "14:00", end: "22:00", memo: "마감" },
+      { id: 115, date: "2026-10-08", start: "10:00", end: "16:00", memo: "오픈" },
+      { id: 116, date: "2026-10-17", start: "12:00", end: "18:00", memo: "미들" },
+    ];
+    const req = REQUESTS[params.get("id")] || REQUESTS.r1;
+    let applied = params.get("applied") === "1";
+    const selectedOfferIds = new Set();
+    let offerView = { year:2026, month:9 };
+
+    document.getElementById("pageTitle").textContent = `${req.type} ${req.type === "급구" ? "지원" : "요청"}`;
+    document.getElementById("typeLabel").textContent = req.type;
+    document.getElementById("requester").textContent = `${req.from}${req.type === "급구" ? "" : "님"} 요청`;
+    document.getElementById("date").textContent = fmtDate(req.date);
+    document.getElementById("memo").textContent = `· ${req.memo}`;
+    document.getElementById("time").textContent = `${req.start}–${req.end}`;
+    document.getElementById("requestMeta").textContent = req.store;
+    const info = document.getElementById("info");
+    info.innerHTML = req.info.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHTML(v)}</dd>`).join("");
+    info.hidden = req.info.length === 0;
+
+    if (req.relation) {
+      const rel = document.getElementById("relation");
+      rel.textContent = req.relation;
+      rel.hidden = false;
+    }
+
+    const isEx = req.type === "교대";
+    document.getElementById("offerBox").hidden = !isEx;
+    document.getElementById("applyBtn").textContent = isEx ? "이 근무로 교대 제안하기" : "지원하기";
+
+    if (isEx && req.acceptDates) {
+      const note = document.getElementById("acceptNote");
+      const matched = MY_OFFERS.filter((s) => req.acceptDates.includes(s.date)).length;
+      note.innerHTML = `${req.from}님이 대신 일할 수 있는 날은 <b>${req.acceptDates.map(fmtDate).join(" · ")}</b>이에요. 이 중 내 근무가 있는 <b>${matched}일</b>만 제안할 수 있어요.`;
+      note.hidden = false;
+      document.getElementById("offerLegend").hidden = false;
+      document.getElementById("offerHelp").textContent = "색이 칠해진 날의 내 근무를 여러 개 고를 수 있어요";
+    }
+
+    function renderOfferCalendar() {
+      const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
+      const { year, month } = offerView;
+      const monthIndex = month - 1;
+      document.getElementById("offerMonth").textContent = `${year}년 ${month}월`;
+      const firstDay = new Date(year, monthIndex, 1).getDay();
+      const lastDate = new Date(year, monthIndex + 1, 0).getDate();
+      const accept = req.acceptDates ? new Set(req.acceptDates) : null;
+      const byDate = new Map(MY_OFFERS.map((s) => [s.date, s]));
+      const blanks = Array.from({ length:firstDay }, () => '<span aria-hidden="true"></span>').join("");
+      const days = Array.from({ length:lastDate }, (_, i) => {
+        const day = i + 1;
+        const iso = `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+        const mine = byDate.get(iso);
+        const accepted = !accept || accept.has(iso);
+        const offer = mine && accepted ? mine : null;         // 상대가 받을 수 있는 날의 내 근무만 선택 가능
+        const blocked = mine && !accepted;                     // 내 근무는 있지만 상대가 안 되는 날
+        const acceptOnly = !mine && accept && accept.has(iso); // 상대는 되지만 내 근무가 없는 날
+        const selected = offer && selectedOfferIds.has(offer.id);
+        const cls = `calendar-day${offer ? " available" : ""}${selected ? " selected" : ""}${blocked ? " blocked" : ""}${acceptOnly ? " accept-only" : ""}`;
+        const label = `${month}월 ${day}일${offer ? " 제안할 수 있는 근무" : blocked ? ` 근무 있음, ${req.from}님이 안 되는 날` : acceptOnly ? ` ${req.from}님 가능, 내 근무 없음` : ""}`;
+        return `<button type="button" class="${cls}" ${offer ? `data-offer-id="${offer.id}"` : "disabled"} aria-label="${label}" aria-pressed="${selected ? "true" : "false"}">${day}</button>`;
+      }).join("");
+      document.getElementById("offerCalendar").innerHTML = weekdays.map((d) => `<span class="weekday">${d}</span>`).join("") + blanks + days;
+      const detail = document.getElementById("selectedOffer");
+      const selectedOffers = MY_OFFERS.filter((s) => selectedOfferIds.has(s.id));
+      detail.hidden = selectedOffers.length === 0;
+      detail.innerHTML = selectedOffers.length ? `<div class="selected-offer-head"><b>선택한 내 근무</b><span>${selectedOffers.length}개</span></div><div class="selected-offer-list">${selectedOffers.map((s) => `<div class="selected-offer-row"><span class="num">${fmtDate(s.date)} · ${s.memo}</span><strong class="num">${s.start}–${s.end}</strong></div>`).join("")}</div>` : "";
+      if (isEx) document.getElementById("applyBtn").textContent = selectedOffers.length ? `선택한 근무 ${selectedOffers.length}개로 교대 제안하기` : "교대할 근무 선택하기";
+    }
+
+    document.getElementById("offerCalendar").addEventListener("click", (e) => {
+      const day = e.target.closest("[data-offer-id]");
+      if (!day) return;
+      const offerId = Number(day.dataset.offerId);
+      if (selectedOfferIds.has(offerId)) selectedOfferIds.delete(offerId);
+      else selectedOfferIds.add(offerId);
+      document.getElementById("applyError").hidden = true;
+      renderOfferCalendar();
+    });
+    document.getElementById("offerPrev").addEventListener("click", () => {
+      offerView.month -= 1;
+      if (offerView.month < 1) { offerView.month = 12; offerView.year -= 1; }
+      renderOfferCalendar();
+    });
+    document.getElementById("offerNext").addEventListener("click", () => {
+      offerView.month += 1;
+      if (offerView.month > 12) { offerView.month = 1; offerView.year += 1; }
+      renderOfferCalendar();
+    });
+    renderOfferCalendar();
+
+    function render() {
+      const pill = document.getElementById("statusPill");
+      pill.className = `pill ${applied ? "wait" : "open"}`;
+      pill.textContent = applied ? "선택 대기" : "모집 중";
+      document.getElementById("applyBox").hidden = applied;
+      document.getElementById("appliedBox").hidden = !applied;
+      document.getElementById("appliedText").textContent = `지원했어요. ${req.picker}이 고르면 알림으로 알려드려요.`;
+    }
+
+    document.getElementById("applyBtn").addEventListener("click", () => {
+      const err = document.getElementById("applyError");
+      if (isEx && selectedOfferIds.size === 0) {
+        err.textContent = "달력에서 제안할 내 근무를 하나 이상 골라주세요.";
+        err.hidden = false;
+        return;
+      }
+      err.hidden = true;
+      applied = true;
+      render();
+      window.scrollTo(0, 0);
+      toast("지원했어요");
+    });
+
+    const sheet = document.getElementById("withdrawSheet");
+    document.getElementById("withdrawBtn").addEventListener("click", () => sheet.showModal());
+    sheet.addEventListener("close", () => {
+      if (sheet.returnValue !== "yes") return;
+      applied = false;
+      render();
+      toast("지원을 철회했어요");
+    });
+
+    render();
+  </script>
+</body>
+</html>

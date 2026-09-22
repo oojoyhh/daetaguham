@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>내 정보 | 알바생</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .profile { display: flex; align-items: center; gap: 14px; }
+    .profile .avatar { width: 56px; height: 56px; font-size: 20px; }
+    .profile b { font-size: 18px; }
+    .avail-row { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; padding: 12px 18px; border-top: 1px solid var(--line-2); }
+    .avail-row:first-child { border-top: 0; }
+    .avail-row .dname { font-weight: 700; }
+    .avail-row .dname.sun { color: var(--bad); }
+    .times { display: flex; align-items: center; gap: 6px; }
+    .times select { height: 36px; padding: 0 8px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--surface); font-variant-numeric: tabular-nums; }
+    .times .off { color: var(--muted); font-size: 14px; }
+    .store-name { font-size:16px; font-weight:800; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <header class="topbar">
+      <h1>내 정보</h1>
+      <span class="account-meta"><b>한석휘</b><small>건대점</small></span>
+    </header>
+
+    <main class="content">
+      <section class="card profile">
+        <span class="avatar">석휘</span>
+        <div><b>한석휘</b><p class="muted num">010-1111-2222</p></div>
+      </section>
+
+      <h2 class="section-title">내 매장</h2>
+      <section class="card tight">
+        <div class="setting-row">
+          <div class="grow"><b class="store-name">건대점</b><small>알바생 · 2023년 3월부터</small></div>
+        </div>
+        <a class="setting-row" href="join.html">
+          <div class="grow"><b style="color:var(--accent)">+ 다른 매장 참여하기</b><small>초대코드가 필요해요</small></div>
+          <span class="chev" aria-hidden="true">›</span>
+        </a>
+      </section>
+
+      <h2 class="section-title">근무 가능 시간 <small>대타·급구 추천에 쓰여요</small></h2>
+      <section class="card tight" id="avail"></section>
+      <div class="bottom-bar" style="position:static;margin:0;padding:0;background:none">
+        <button class="btn btn-primary btn-block" type="button" id="saveBtn">저장</button>
+        <span class="api-tag" style="margin-top:6px">PUT /me/availabilities</span>
+      </div>
+
+      <a class="btn btn-text btn-block" href="../login.html">로그아웃</a>
+    </main>
+
+    <nav class="tabbar" data-role="worker" data-active="me"></nav>
+  </div>
+
+  <script src="../js/common.js"></script>
+  <script>
+    const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // 월~일
+    const avail = {
+      1: { on: true, s: "16", e: "22" }, 2: { on: true, s: "14", e: "22" }, 3: { on: true, s: "14", e: "22" },
+      4: { on: false, s: "10", e: "22" }, 5: { on: true, s: "10", e: "22" }, 6: { on: true, s: "10", e: "22" }, 0: { on: true, s: "10", e: "16" },
+    };
+    const hourOpts = (sel) => Array.from({ length: 15 }, (_, i) => 9 + i)
+      .map((h) => `<option value="${pad(h)}" ${pad(h) === sel ? "selected" : ""}>${pad(h)}:00</option>`).join("");
+
+    function render() {
+      document.getElementById("avail").innerHTML = DAY_ORDER.map((d) => {
+        const a = avail[d];
+        return `
+          <div class="avail-row">
+            <span class="dname ${d === 0 ? "sun" : ""}">${WEEKDAYS[d]}</span>
+            <div class="times">
+              ${a.on
+                ? `<select data-day="${d}" data-key="s" aria-label="${WEEKDAYS[d]}요일 시작">${hourOpts(a.s)}</select>
+                   <span class="muted">–</span>
+                   <select data-day="${d}" data-key="e" aria-label="${WEEKDAYS[d]}요일 종료">${hourOpts(a.e)}</select>`
+                : `<span class="off">안 돼요</span>`}
+            </div>
+            <label class="switch"><input type="checkbox" data-day="${d}" ${a.on ? "checked" : ""} aria-label="${WEEKDAYS[d]}요일 근무 가능"><span></span></label>
+          </div>`;
+      }).join("");
+    }
+
+    document.getElementById("avail").addEventListener("change", (e) => {
+      const d = e.target.dataset.day;
+      if (d === undefined) return;
+      if (e.target.type === "checkbox") { avail[d].on = e.target.checked; render(); }
+      else avail[d][e.target.dataset.key] = e.target.value;
+    });
+
+    document.getElementById("saveBtn").addEventListener("click", () => {
+      const bad = DAY_ORDER.find((d) => avail[d].on && avail[d].e <= avail[d].s);
+      if (bad !== undefined) { toast(`${WEEKDAYS[bad]}요일 종료 시간이 시작보다 늦어야 해요`); return; }
+      toast("근무 가능 시간을 저장했어요");
+    });
+
+    render();
+  </script>
+</body>
+</html>

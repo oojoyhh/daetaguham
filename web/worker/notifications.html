@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>알림 | 알바생</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .noti { align-items: flex-start; }
+    .noti .ic { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; font-size: 13px; font-weight: 800; flex: none; }
+    .noti .ic.req { background: var(--accent-soft); color: var(--accent); }
+    .noti .ic.ok { background: var(--ok-soft); color: var(--ok); }
+    .noti .ic.gg { background: var(--mark-soft); color: var(--mark-ink); }
+    .noti .ic.bad { background: var(--bad-soft); color: var(--bad); }
+    .noti.unread .title::after { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--bad); margin-left: 6px; vertical-align: 3px; }
+    .noti .title { font-weight: 600; }
+    .noti.read .title { font-weight: 500; color: var(--ink-2); }
+    .group-title { font-size: 13px; font-weight: 700; color: var(--muted); margin: 6px 4px 0; }
+    .store-messages { padding:15px; }
+    .store-message-head { display:flex; align-items:flex-end; justify-content:space-between; gap:10px; }
+    .store-message-head h2 { margin:0; font-size:17px; }
+    .store-message-head span { color:var(--muted); font-size:11.5px; }
+    .store-message { display:grid; grid-template-columns:48px minmax(0,1fr); gap:10px; padding:12px 0; border-top:1px solid var(--line-2); }
+    .store-message:first-child { margin-top:9px; }
+    .store-message time { color:var(--accent); font-size:12.5px; font-weight:850; font-variant-numeric:tabular-nums; }
+    .store-message p { margin:0; color:var(--ink-2); font-size:13.5px; line-height:1.45; }
+    .store-message small { display:block; margin-top:4px; color:var(--muted); font-size:11.5px; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <header class="topbar">
+      <h1>알림</h1>
+      <button class="btn btn-sm btn-text" type="button" id="readAll">모두 읽음</button>
+    </header>
+
+    <main class="content">
+      <section class="card store-messages" id="storeMessages" aria-labelledby="storeMessageTitle">
+        <div class="store-message-head">
+          <h2 id="storeMessageTitle">매장 전달사항</h2>
+          <span>점장님이 공유한 내용</span>
+        </div>
+        <div id="storeMessageList"></div>
+        <span class="api-tag" style="margin-top:8px">GET /me/store-notices</span>
+      </section>
+      <p class="group-title">TODAY</p>
+      <section class="card tight" id="today"></section>
+      <p class="group-title">이전</p>
+      <section class="card tight" id="before"></section>
+      <span class="api-tag">GET /me/notifications · PUT /me/notifications/{id}/read</span>
+    </main>
+
+    <nav class="tabbar" data-role="worker" data-active="noti" data-role-param></nav>
+  </div>
+
+  <script src="../js/common.js"></script>
+  <script>
+    // 역할별 예시 알림. 점장·사장은 ?role=manager / ?role=owner 로 같은 화면을 써요.
+    const NOTIS_BY_ROLE = {
+      manager: [
+        { id: 11, day: "today", ic: "req", mark: "승", text: "박유진님 → 김민님 대타 승인 요청", sub: "9/19(토) 14:00–22:00 · 14:02", href: "../manager/approvals.html", unread: true },
+        { id: 12, day: "today", ic: "gg", mark: "참", text: "한석휘님이 성수점 참여를 신청했어요", sub: "초대코드 SEONG7 · 10:15", href: "../manager/staff.html", unread: true },
+        { id: 13, day: "today", ic: "req", mark: "승", text: "정재웅님 ⇄ 김민님 교대 승인 요청", sub: "9/21(월) ⇄ 9/24(목) · 11:30", href: "../manager/approvals.html", unread: false },
+        { id: 14, day: "before", ic: "bad", mark: "✕", text: "9/8 이진호님 대타 요청이 만료됐어요", sub: "근무 시작 전까지 상대가 정해지지 않았어요 · 9/8", href: "../manager/schedule.html", unread: false },
+      ],
+      owner: [
+        { id: 21, day: "today", ic: "gg", mark: "급", text: "건대점 급구에 2명이 지원했어요", sub: "9/29(화) 12:00–20:00 · 12:15", href: "../owner/open-shift-detail.html?id=g1", unread: true },
+        { id: 22, day: "today", ic: "req", mark: "승", text: "성수점 승인할 요청 3건", sub: "대타 2 · 교대 1", href: "../manager/approvals.html?role=owner&store=A", unread: true },
+        { id: 23, day: "today", ic: "ok", mark: "✓", text: "건대점 9/28 대타가 확정됐어요", sub: "권예리님 → 배민혁님 · 자동 확정 매장 · 09:40", href: "../manager/schedule.html?role=owner&store=B", unread: false },
+        { id: 24, day: "before", ic: "ok", mark: "✓", text: "이진호님이 건대점에서 헬퍼로 일했어요", sub: "성수점 직원이 건대점 마감을 도왔어요 · 9/15", href: "../manager/staff.html?role=owner&store=B", unread: false },
+      ],
+    };
+    const WORKER_NOTIS = [
+      { id: 1, day: "today", ic: "req", mark: "교", text: "배민혁님이 교대를 제안했어요", sub: "내 9/23(수) ⇄ 9/22(화) · 16:20", href: "home.html", unread: true },
+      { id: 2, day: "today", ic: "req", mark: "지", text: "인수연님이 9/19 대타에 지원했어요", sub: "지원자 3명 · 13:20", href: "request.html", unread: true },
+      { id: 3, day: "today", ic: "gg", mark: "급", text: "성수점 급구: 9/29(화) 12:00–20:00", sub: "사장님이 올렸어요 · 11:02", href: "apply.html?id=g1", unread: false },
+      { id: 4, day: "before", ic: "ok", mark: "✓", text: "9/12 교대가 확정됐어요", sub: "점장님이 승인했어요 · 9/10", href: "home.html", unread: false },
+      { id: 5, day: "before", ic: "ok", mark: "✓", text: "성수점 급구에 선택됐어요", sub: "9/6(일) 12:00–18:00 · 9/5", href: "home.html", unread: false },
+      { id: 6, day: "before", ic: "bad", mark: "✕", text: "9/8 대타 요청이 만료됐어요", sub: "근무 시작 전까지 상대가 정해지지 않았어요 · 9/8", href: "board.html?tab=mine", unread: false },
+    ];
+
+    const role = params.get("role");
+    const NOTIS = NOTIS_BY_ROLE[role] || WORKER_NOTIS;
+    if (NOTIS_BY_ROLE[role]) document.title = `알림 | ${role === "owner" ? "사장" : "점장"}`;
+
+    function renderStoreMessages() {
+      const section = document.getElementById("storeMessages");
+      if (role) { section.hidden = true; return; }
+      // 내가 속한 매장 것만 본다 (한석휘는 건대점 소속)
+      const stores = { B: "건대점" };
+      const notices = Object.keys(stores).flatMap((store) =>
+        getStoreNotices(store)
+          .filter((notice) => notice.noticeDate >= TODAY)
+          .map((notice) => ({ ...notice, store }))
+      ).sort((a, b) => a.noticeDate.localeCompare(b.noticeDate));
+      document.getElementById("storeMessageList").innerHTML = notices.length ? notices.map((notice) => `
+        <div class="store-message">
+          <time datetime="${notice.noticeDate}">${fmtDate(notice.noticeDate).split("(")[0]}</time>
+          <span><p>${escapeHTML(notice.content)}</p><small>${stores[notice.store]} · ${notice.createdByName}</small></span>
+        </div>`).join("") : `<p class="empty">새로운 전달사항이 없어요.</p>`;
+    }
+
+    function render() {
+      ["today", "before"].forEach((day) => {
+        document.getElementById(day).innerHTML = NOTIS.filter((n) => n.day === day).map((n) => `
+          <a class="list-item noti ${n.unread ? "unread" : "read"}" href="${n.href}" data-id="${n.id}">
+            <span class="ic ${n.ic}" aria-hidden="true">${n.mark}</span>
+            <div class="grow"><p class="title">${n.text}</p><p class="desc num">${n.sub}</p></div>
+          </a>`).join("");
+      });
+    }
+
+    document.querySelector("main").addEventListener("click", (e) => {
+      const a = e.target.closest("[data-id]");
+      if (a) NOTIS.find((n) => n.id === Number(a.dataset.id)).unread = false;
+    });
+    document.getElementById("readAll").addEventListener("click", () => {
+      NOTIS.forEach((n) => (n.unread = false));
+      render();
+      toast("모두 읽음으로 표시했어요");
+    });
+
+    renderStoreMessages();
+    render();
+  </script>
+</body>
+</html>

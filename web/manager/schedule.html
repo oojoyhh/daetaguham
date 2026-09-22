@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>이번 주 근무표 | 점장</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .week-head { display: flex; align-items: center; justify-content: space-between; }
+    .week-head b { font-size: 16px; }
+    .days button .cnt { font-size: 11px; color: var(--muted); }
+    .days button[aria-pressed="true"] .cnt { color: #A3AABA; }
+    .shift-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 18px; border: 0; border-top: 1px solid var(--line-2); background: none; text-align: left; cursor: pointer; }
+    .shift-row:first-child { border-top: 0; }
+    .shift-row .grow { flex: 1; min-width: 0; }
+    .shift-row .t { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .shift-row.empty-shift .avatar { background: var(--line-2); color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <header class="topbar sub">
+      <a class="icon-btn" id="backLink" href="schedule-bulk.html" aria-label="뒤로"><span id="backIcon"></span></a>
+      <h1>이번 주 근무표</h1>
+      <span class="account-meta"><b>배스킨라빈스</b><small>성수점</small></span>
+    </header>
+
+    <main class="content">
+      <div class="segmented" id="storeSwitch" hidden></div>
+      <p class="help" id="noManagerNote" hidden style="padding:0 4px">건대점은 점장이 없어서 사장님이 직접 근무표를 관리해요.</p>
+      <div class="week-head">
+        <button class="icon-btn" type="button" aria-label="지난주" data-todo="예시 데이터는 이번 주만 있어요">‹</button>
+        <b class="num">9월 14일 – 20일</b>
+        <button class="icon-btn" type="button" aria-label="다음 주" data-todo="예시 데이터는 이번 주만 있어요">›</button>
+      </div>
+      <div class="days" id="days" role="group" aria-label="날짜 선택"></div>
+
+      <h2 class="section-title" id="dayTitle"></h2>
+      <a class="banner" id="openShiftLink" href="#" hidden>
+        <span class="grow">비어 있는 근무가 있어요<small>사장님은 급구로 한 번에 사람을 구할 수 있어요</small></span>
+        <span aria-hidden="true">급구 올리기 ›</span>
+      </a>
+      <section class="card tight" id="shiftList"></section>
+      <span class="api-tag">GET /stores/{id}/shifts?from&amp;to</span>
+
+      <div class="bottom-bar">
+        <div>
+          <button class="btn btn-primary btn-block" type="button" id="addBtn">+ 근무 추가</button>
+        </div>
+      </div>
+    </main>
+
+    <nav class="tabbar" data-role="manager" data-active="schedule" data-role-param data-counts="approvals:3"></nav>
+  </div>
+
+  <!-- 근무 추가·수정 -->
+  <dialog class="sheet" id="shiftSheet">
+    <form method="dialog" id="shiftForm" novalidate>
+      <div class="sheet-body">
+        <h3 id="sheetTitle">근무 추가</h3>
+        <div class="field">
+          <label for="worker">근무자</label>
+          <select class="select" id="worker"></select>
+        </div>
+        <div class="btn-row">
+          <div class="field"><label for="start">시작</label><input class="input" type="time" id="start" step="1800"></div>
+          <div class="field"><label for="end">종료</label><input class="input" type="time" id="end" step="1800"></div>
+        </div>
+        <div class="field">
+          <label for="memo">포지션</label>
+          <input class="input" id="memo" list="positions" maxlength="10" placeholder="시간대 이름 · 최대 10자">
+          <datalist id="positions"><option value="오픈"><option value="미들"><option value="마감"></datalist>
+        </div>
+        <p class="error-text" id="sheetError" hidden></p>
+        <span class="api-tag" id="sheetApi">POST /stores/{id}/shifts</span>
+        <button class="btn btn-text" type="button" id="deleteBtn" hidden style="color:var(--bad)">이 근무 삭제</button>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn" type="button" id="closeBtn">닫기</button>
+        <button class="btn btn-primary" type="submit">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="../js/common.js"></script>
+  <script>
+    document.getElementById("backIcon").outerHTML = BACK_ICON;
+    // 매장별 예시 데이터. 점장은 담당 매장(성수점)만, 사장은 ?role=owner로 두 매장을 전환해서 봐요.
+    const STORE_DATA = {
+      A: { name: "성수점", staff: ["김계원", "이진호", "김민", "정재웅", "박유진"], shifts: null },
+      B: { name: "건대점", staff: ["한석휘", "권예리", "배민혁", "인수연"], shifts: [
+        { id: 51, date: "2026-09-14", who: "한석휘", s: "10:00", e: "16:00", memo: "오픈" },
+        { id: 52, date: "2026-09-15", who: "권예리", s: "10:00", e: "16:00", memo: "오픈" },
+        { id: 53, date: "2026-09-15", who: "인수연", s: "16:00", e: "22:00", memo: "마감" },
+        { id: 54, date: "2026-09-16", who: "한석휘", s: "10:00", e: "16:00", memo: "오픈" },
+        { id: 55, date: "2026-09-17", who: "이진호", s: "18:00", e: "22:00", memo: "마감", tag: "헬퍼" },
+        { id: 56, date: "2026-09-18", who: "배민혁", s: "12:00", e: "20:00", memo: "미들" },
+        { id: 57, date: "2026-09-19", who: "배민혁", s: "10:00", e: "16:00", memo: "오픈" },
+        { id: 58, date: "2026-09-19", who: null, s: "16:00", e: "22:00", memo: "마감" },
+        { id: 59, date: "2026-09-20", who: "권예리", s: "12:00", e: "20:00", memo: "미들" },
+      ] },
+    };
+    // 예시의 요청 FK를 조회한 결과. 실제 API는 요청 상태와 무관하게 세 참조 관계를 검사합니다.
+    const REFERENCED_SHIFTS = { A: new Set([13]), B: new Set() };
+    const referenceMessage = "요청 기록에 연결된 근무는 수정·삭제할 수 없어요. 취소한 요청도 기록이 남아요.";
+    // 다른 매장 근무 (겹침 검사용 예시): 이진호 9/17 건대점 헬퍼 18–22
+    const OTHER_STORE = [{ who: "이진호", date: "2026-09-17", s: "18:00", e: "22:00", store: "건대점" }];
+
+    let nextId = 900;
+    STORE_DATA.A.shifts = [
+      { id: 1, date: "2026-09-14", who: "김계원", s: "10:00", e: "16:00", memo: "오픈" },
+      { id: 2, date: "2026-09-14", who: "이진호", s: "16:00", e: "22:00", memo: "마감" },
+      { id: 3, date: "2026-09-15", who: "김민", s: "10:00", e: "16:00", memo: "오픈" },
+      { id: 4, date: "2026-09-15", who: "박유진", s: "12:00", e: "18:00", memo: "미들" },
+      { id: 5, date: "2026-09-15", who: "이진호", s: "16:00", e: "22:00", memo: "마감" },
+      { id: 6, date: "2026-09-16", who: "김계원", s: "10:00", e: "14:00", memo: "오픈" },
+      { id: 7, date: "2026-09-16", who: "정재웅", s: "14:00", e: "22:00", memo: "마감" },
+      { id: 8, date: "2026-09-17", who: "김민", s: "10:00", e: "16:00", memo: "오픈" },
+      { id: 9, date: "2026-09-17", who: "이진호", s: "16:00", e: "22:00", memo: "마감" },
+      { id: 10, date: "2026-09-18", who: "김계원", s: "10:00", e: "16:00", memo: "오픈" },
+      { id: 11, date: "2026-09-18", who: null, s: "16:00", e: "22:00", memo: "마감" },
+      { id: 12, date: "2026-09-19", who: "정재웅", s: "10:00", e: "14:00", memo: "오픈" },
+      { id: 13, date: "2026-09-19", who: "박유진", s: "14:00", e: "22:00", memo: "마감", tag: "대타 모집 중" },
+      { id: 14, date: "2026-09-20", who: "김민", s: "10:00", e: "16:00", memo: "오픈" },
+      { id: 15, date: "2026-09-20", who: "정재웅", s: "16:00", e: "22:00", memo: "마감" },
+    ];
+    const WEEK = Array.from({ length: 7 }, (_, i) => toISO(2026, 9, 14 + i));
+    let selected = WEEK.includes(params.get("date")) ? params.get("date") : TODAY;
+    let editing = null;
+    const isOwner = params.get("role") === "owner";
+    let STAFF, shifts;
+
+    function useStore(key) {
+      const d = STORE_DATA[key];
+      STAFF = d.staff;
+      shifts = d.shifts;
+      document.getElementById("worker").innerHTML =
+        `<option value="">담당자 미정</option>` + STAFF.map((n) => `<option>${n}</option>`).join("");
+      document.querySelectorAll(".account-meta small").forEach((el) => (el.textContent = isOwner ? `${d.name} 근무표` : d.name));
+      document.getElementById("noManagerNote").hidden = !(isOwner && key === "B");
+      const link = document.getElementById("openShiftLink");
+      link.href = `../owner/open-shift.html?store=${key}`;
+      link.dataset.store = key;
+      document.getElementById("backLink").href = `schedule-bulk.html${isOwner ? `?role=owner&store=${key}` : ""}`;
+    }
+
+    let storeKey = mountStoreSwitch((k) => { storeKey = k; useStore(k); render(); });
+    if (!isOwner) storeKey = "A";
+    useStore(storeKey);
+
+    function renderDays() {
+      document.getElementById("days").innerHTML = WEEK.map((d) => {
+        const [, , dd] = d.split("-").map(Number);
+        const empty = shifts.some((s) => s.date === d && !s.who);
+        return `<button type="button" data-date="${d}" aria-pressed="${d === selected}">
+                  <small>${WEEKDAYS[new Date(2026, 8, dd).getDay()]}</small><b>${dd}</b>
+                  <span class="cnt">${empty ? "미배정" : shifts.filter((s) => s.date === d).length + "명"}</span>
+                </button>`;
+      }).join("");
+    }
+
+    function renderList() {
+      document.getElementById("dayTitle").innerHTML = `${fmtDate(selected)}${selected === TODAY ? " <small>TODAY</small>" : ""}`;
+      const list = shifts.filter((s) => s.date === selected).sort((a, b) => a.s.localeCompare(b.s));
+      document.getElementById("shiftList").innerHTML = list.length ? list.map((s) => `
+        <button class="shift-row ${s.who ? "" : "empty-shift"}" type="button" data-id="${s.id}">
+          <span class="avatar">${s.who ? shortName(s.who) : "?"}</span>
+          <span class="grow">
+            <b>${s.who || "담당자 미정"}</b>
+            <p class="t">${s.s}–${s.e}</p>
+          </span>
+          ${s.tag ? `<span class="pill wait">${s.tag}</span>` : `<span class="pill b${bandNo(s.memo)}">${s.memo}</span>`}
+        </button>`).join("") : `<p class="empty">이날은 근무가 없어요</p>`;
+      // 급구는 사장만 올릴 수 있어서, 사장이 볼 때 빈 근무가 있으면 급구 바로가기를 보여줘요
+      document.getElementById("openShiftLink").hidden = !(isOwner && list.some((s) => !s.who));
+    }
+
+    function render() { renderDays(); renderList(); }
+
+    const sheet = document.getElementById("shiftSheet");
+    const err = document.getElementById("sheetError");
+
+    function openSheet(shift) {
+      editing = shift;
+      err.hidden = true;
+      document.getElementById("sheetTitle").textContent = shift ? `${fmtDate(shift.date)} 근무 수정` : `${fmtDate(selected)} 근무 추가`;
+      document.getElementById("worker").value = shift?.who || "";
+      document.getElementById("start").value = shift?.s || "10:00";
+      document.getElementById("end").value = shift?.e || "16:00";
+      document.getElementById("memo").value = shift?.memo || "오픈";
+      document.getElementById("deleteBtn").hidden = !shift;
+      document.getElementById("sheetApi").textContent = shift ? "PUT /shifts/{id} · DELETE /shifts/{id}" : "POST /stores/{id}/shifts";
+      sheet.showModal();
+    }
+
+    const overlap = (a1, a2, b1, b2) => a1 < b2 && b1 < a2;
+
+    document.getElementById("shiftForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const who = document.getElementById("worker").value || null;
+      const s = document.getElementById("start").value;
+      const en = document.getElementById("end").value;
+      const date = editing ? editing.date : selected;
+      const memo = document.getElementById("memo").value;
+
+      let msg = "";
+      if (editing && REFERENCED_SHIFTS[storeKey].has(editing.id) && (who !== editing.who || s !== editing.s || en !== editing.e || memo !== editing.memo)) msg = referenceMessage;
+      else if (!s || !en || en <= s) msg = "종료 시간은 시작 시간보다 늦어야 해요.";
+      else if (who) {
+        const mine = shifts.find((x) => x !== editing && x.date === date && x.who === who && overlap(s, en, x.s, x.e));
+        const other = OTHER_STORE.find((x) => x.store !== STORE_DATA[storeKey].name && x.who === who && x.date === date && overlap(s, en, x.s, x.e));
+        if (mine) msg = `${who}님은 ${mine.s}–${mine.e}에 이미 근무가 있어요.`;
+        else if (other) msg = `${who}님은 ${other.store}에서 ${other.s}–${other.e}에 근무해요.`;
+      }
+      if (msg) { err.textContent = msg; err.hidden = false; return; }
+
+      const data = { who, s, e: en, memo: document.getElementById("memo").value };
+      if (editing) Object.assign(editing, data, { tag: editing.who === who ? editing.tag : undefined });
+      else shifts.push({ id: nextId++, date, ...data });
+      sheet.close();
+      render();
+      toast(editing ? "근무를 수정했어요" : "근무를 추가했어요");
+    });
+
+    document.getElementById("deleteBtn").addEventListener("click", () => {
+      if (REFERENCED_SHIFTS[storeKey].has(editing.id)) {
+        err.textContent = referenceMessage;
+        err.hidden = false;
+        return;
+      }
+      shifts.splice(shifts.indexOf(editing), 1);
+      sheet.close();
+      render();
+      toast("근무를 삭제했어요");
+    });
+    document.getElementById("closeBtn").addEventListener("click", () => sheet.close());
+
+    document.getElementById("days").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-date]");
+      if (b) { selected = b.dataset.date; render(); }
+    });
+    document.getElementById("shiftList").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-id]");
+      if (b) openSheet(shifts.find((s) => s.id === Number(b.dataset.id)));
+    });
+    document.getElementById("addBtn").addEventListener("click", () => openSheet(null));
+
+    render();
+  </script>
+</body>
+</html>

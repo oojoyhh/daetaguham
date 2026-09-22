@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>근무표 | 점장</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .month-head { display: flex; align-items: center; justify-content: space-between; }
+    .month-head b { font-size: 17px; }
+
+    .content > *, .staff-tool, .week-panel { min-width:0; }
+    .staff-tool { padding:14px 15px; overflow:hidden; }
+    .staff-tool-head { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:11px; }
+    .staff-tool-head small { display:block; color:var(--muted); font-size:11.5px; }
+    .staff-tool-head b { display:block; margin-top:2px; font-size:17px; }
+    .staff-tool-head span { color:var(--muted); font-size:11.5px; text-align:right; }
+    #palette { flex-wrap:nowrap; padding-bottom:2px; }
+    #palette button { flex:0 0 auto; }
+    .availability-hint { margin-top:10px; padding-top:10px; border-top:1px solid var(--line-2); color:var(--ink-2); font-size:12.5px; line-height:1.45; }
+    .availability-hint b { color:var(--accent); }
+    .quick-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .quick-actions .btn, .week-actions .btn { padding:0 8px; font-size:13px; }
+
+
+    .week-panel { display:grid; gap:10px; }
+    .week-nav { display:grid; grid-template-columns:40px 1fr 40px; align-items:center; padding:10px 8px; background:var(--surface); border-radius:16px; border:1px solid var(--line-2); }
+    .week-nav button { width:40px; height:40px; border:0; border-radius:11px; background:transparent; font-size:24px; cursor:pointer; }
+    .week-nav button:disabled { opacity:.25; cursor:default; }
+    .week-title { min-width:0; text-align:center; }
+    .week-title small { display:block; color:var(--accent); font-size:11.5px; font-weight:800; }
+    .week-title b { display:block; margin-top:1px; font-size:16px; }
+    .week-status { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .week-status div { padding:10px 12px; border-radius:12px; background:var(--surface); border:1px solid var(--line-2); }
+    .week-status small { display:block; color:var(--muted); font-size:11px; }
+    .week-status b { display:block; margin-top:2px; font-size:17px; }
+    .week-status .warn b { color:var(--warn); }
+
+    .week-days { display:grid; gap:10px; }
+    .day-card { overflow:hidden; border:1px solid var(--line); border-radius:16px; background:var(--surface); }
+    .day-head { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid var(--line-2); }
+    .day-head b { font-size:16px; }
+    .day-head small { color:var(--muted); font-size:11.5px; }
+    .day-head .sun { color:var(--bad); }
+    .day-state { color:var(--accent); font-size:11.5px; font-weight:800; }
+    .day-state.short { color:var(--warn); }
+    .shift-slot { display:grid; grid-template-columns:70px minmax(0,1fr) 28px; align-items:center; gap:10px; width:100%; min-height:58px; padding:10px 13px; border:0; border-top:1px solid var(--line-2); background:transparent; text-align:left; cursor:pointer; }
+    .shift-slot:first-child { border-top:0; }
+    .shift-slot:hover { background:var(--bg); }
+    .shift-slot { box-shadow:inset 4px 0 0 var(--line-2); }
+    .shift-slot.b0 { box-shadow:inset 4px 0 0 var(--accent); }
+    .shift-slot.b1 { box-shadow:inset 4px 0 0 var(--mark); }
+    .shift-slot.b2 { box-shadow:inset 4px 0 0 var(--band-close); }
+    .shift-slot.short .slot-empty { color:var(--warn); }
+    .slot-time b { display:block; font-size:14px; }
+    .slot-time.b0 b { color:var(--accent); }
+    .slot-time.b1 b { color:var(--mark-ink); }
+    .slot-time.b2 b { color:var(--band-close); }
+    .slot-time small { display:block; color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+    .slot-workers { display:flex; flex-wrap:wrap; gap:5px; min-width:0; }
+    .slot-empty { color:var(--muted); font-size:12.5px; }
+    .slot-add { display:grid; place-items:center; width:28px; height:28px; border-radius:9px; background:var(--accent-soft); color:var(--accent); font-size:18px; }
+    .chip { padding:4px 7px; font-size:12px; font-weight:800; line-height:1.2; border-radius:7px; background:var(--accent-soft); color:var(--accent); }
+    .chip.b1 { background:var(--mark-soft); color:var(--mark-ink); }
+    .chip.b2 { background:var(--band-close-soft); color:var(--band-close); }
+    .chip.none { background: var(--line-2); color: var(--muted); }
+    .chip.clash { background: var(--bad-soft); color: var(--bad); }
+    .week-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+
+    #pWho, #pBand { flex-wrap: wrap; }
+    .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); padding: 0 4px; }
+    .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+    .legend i.ol { background: none; border: 1.5px solid var(--mark); }
+    .paste { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; white-space: pre; }
+    .band-row { display: flex; align-items: flex-start; gap: 8px; }
+    .band-row .grow { flex: 1; min-width: 0; }
+    .wdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+    .wdays button { height: 40px; border-radius: 11px; border: 1px solid var(--line); background: var(--surface); font-weight: 700; font-size: 13px; cursor: pointer; }
+    .wdays button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: transparent; }
+    .people-card { padding:0; overflow:hidden; }
+    .people-table { width:100%; border-collapse:collapse; table-layout:fixed; }
+    .people-table col:first-child { width:auto; }
+    .people-table col:nth-child(2) { width:58px; }
+    .people-table col:nth-child(3) { width:76px; }
+    .people-table th { padding:10px 14px; background:var(--bg); color:var(--muted); font-size:11.5px; font-weight:750; text-align:left; }
+    .people-table th.num-col, .people-table td.num-col { text-align:right; }
+    .people-table td { height:58px; padding:9px 14px; border-top:1px solid var(--line-2); font-size:13.5px; vertical-align:middle; }
+    .people-table td.num-col { color:var(--ink-2); font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .people-table td.hours { color:var(--ink); font-weight:850; }
+    .person-name { display:flex; align-items:center; gap:9px; min-width:0; }
+    .person-name .avatar { width:32px; height:32px; border-radius:10px; font-size:11px; flex:0 0 auto; }
+    .person-name b { overflow:hidden; font-size:14px; text-overflow:ellipsis; white-space:nowrap; }
+    .monthly-stats { grid-template-columns:repeat(2,1fr) !important; }
+    #monthView[hidden], #editView[hidden] { display:none; }
+    #editView, #monthView { padding-bottom:120px; }
+    #timeBtn, #excelBtn, #backLink, #resetBtn { scroll-margin-bottom:170px; }
+    .month-overview { display:grid; gap:12px; }
+    .month-calendar-card { padding:12px 8px 10px; overflow:hidden; }
+    .month-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:3px; }
+    .month-dow { padding:5px 0 7px; color:var(--muted); font-size:11px; font-weight:750; text-align:center; }
+    .month-dow.sun { color:var(--bad); }
+    .month-day { position:relative; min-width:0; height:80px; padding:6px 3px 5px; border:1px solid transparent; border-radius:10px; background:var(--bg); color:var(--ink); text-align:left; cursor:pointer; overflow:hidden; }
+    .month-day.empty { visibility:hidden; }
+    .month-day[aria-pressed="true"] { border-color:var(--accent); background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent); }
+    .month-day.issue:not([aria-pressed="true"]) { border-color:var(--mark); }
+    .month-day b { display:block; margin-bottom:4px; font-size:12px; line-height:1; }
+    .month-day.sun b { color:var(--bad); }
+    .mini-shift { display:grid; grid-template-columns:13px minmax(0,1fr); align-items:center; gap:1px; min-width:0; height:15px; }
+    .mini-shift i { display:grid; place-items:center; width:12px; height:12px; border-radius:3px; background:var(--accent-soft); color:var(--accent); font-size:7px; font-style:normal; font-weight:900; }
+    .mini-shift.b1 i { background:var(--mark-soft); color:var(--mark-ink); }
+    .mini-shift.b2 i { background:var(--band-close-soft); color:var(--band-close); }
+    .mini-shift span { overflow:hidden; color:var(--ink-2); font-size:9px; font-weight:750; line-height:1; text-overflow:clip; white-space:nowrap; }
+    .mini-shift.missing i { background:var(--mark-soft); color:var(--mark-ink); }
+    .mini-shift.missing span { color:var(--muted); }
+    .month-legend { display:flex; justify-content:center; gap:13px; margin-top:9px; color:var(--muted); font-size:11.5px; }
+    .month-legend i { display:inline-block; width:7px; height:7px; margin-right:4px; border-radius:50%; vertical-align:1px; }
+    .month-detail { padding:14px 15px; }
+    .month-detail-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:7px; }
+    .month-detail-head h2 { margin:0; font-size:17px; }
+    .month-detail-row { display:grid; grid-template-columns:90px minmax(0,1fr); gap:10px; align-items:center; padding:10px 0; border-top:1px solid var(--line-2); }
+    .month-detail-row small { display:block; color:var(--muted); font-size:11px; }
+    .month-detail-row b { font-size:13.5px; }
+    .month-detail-row .b0 b { color:var(--accent); }
+    .month-detail-row .b1 b { color:var(--mark-ink); }
+    .month-detail-row .b2 b { color:var(--band-close); }
+    .month-detail-row .unfilled { color:var(--warn); }
+    .month-tools { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; }
+    .reset-btn { color:#fff; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <header class="topbar">
+      <h1>근무표</h1>
+      <span class="account-meta"><b>배스킨라빈스</b><small>성수점</small></span>
+    </header>
+
+    <main class="content">
+      <div class="segmented" id="storeSwitch" hidden></div>
+
+      <div class="month-head">
+        <button class="icon-btn" type="button" aria-label="지난달" data-todo="예시는 10월만 짤 수 있어요">‹</button>
+        <b class="num">2026년 10월</b>
+        <button class="icon-btn" type="button" aria-label="다음 달" data-todo="예시는 10월만 짤 수 있어요">›</button>
+      </div>
+
+      <div class="segmented" id="scheduleView" role="group" aria-label="근무표 보기 방식">
+        <button type="button" data-schedule-view="month" aria-pressed="true">월간 보기</button>
+        <button type="button" data-schedule-view="edit" aria-pressed="false">주간 편집</button>
+      </div>
+
+      <div class="month-overview" id="monthView">
+        <section class="card month-calendar-card" aria-label="10월 월간 근무표">
+          <div class="month-grid" id="monthGrid"></div>
+          <div class="month-legend">
+            <span><i style="background:var(--accent)"></i>선택한 날</span>
+            <span><i style="background:var(--mark)"></i>인원 부족</span>
+          </div>
+        </section>
+        <section class="card month-detail" aria-labelledby="monthDayTitle">
+          <div class="month-detail-head">
+            <h2 id="monthDayTitle"></h2>
+            <button class="btn btn-sm" type="button" id="editSelectedDay">이 날짜 편집</button>
+          </div>
+          <div id="monthDayShifts"></div>
+        </section>
+        <div class="month-tools">
+          <button class="btn" type="button" id="resetBtn">근무표 초기화</button>
+          <button class="btn btn-primary" type="button" id="openEditBtn">주간 편집하기</button>
+        </div>
+      </div>
+
+      <div class="stack" id="editView" hidden>
+
+      <section class="card staff-tool">
+        <div class="staff-tool-head">
+          <div><small>지금 배정할 직원</small><b id="pickedLabel"></b></div>
+          <span>직원을 고른 뒤<br>근무칸을 누르세요</span>
+        </div>
+        <div class="tabs" id="palette" role="group" aria-label="넣을 사람 선택"></div>
+        <p class="availability-hint" id="availabilityHint"></p>
+      </section>
+
+      <div class="quick-actions">
+        <button class="btn btn-sm" type="button" id="patternBtn">요일 반복 배정</button>
+        <button class="btn btn-sm" type="button" id="copyMonth">지난달 패턴 불러오기</button>
+      </div>
+
+
+      <section class="week-panel" aria-label="주간 근무표 편집">
+        <div class="week-nav">
+          <button type="button" id="prevWeek" aria-label="이전 주">‹</button>
+          <div class="week-title"><small id="weekNumber"></small><b class="num" id="weekRange"></b></div>
+          <button type="button" id="nextWeek" aria-label="다음 주">›</button>
+        </div>
+        <div class="week-status">
+          <div><small>이번 주 배정</small><b id="weekAssigned">0명</b></div>
+          <div class="warn"><small>확인할 칸</small><b id="weekIssues">0개</b></div>
+        </div>
+        <div id="weeks"></div>
+        <div class="week-actions">
+          <button class="btn btn-sm" type="button" id="copyNextWeek">다음 주에 복사</button>
+          <button class="btn btn-primary btn-sm" type="button" id="fillMonth">이 주를 한 달에 반복</button>
+        </div>
+      </section>
+
+      <div class="legend">
+        <span><i style="background:var(--line-2)"></i>미정은 빈 근무로 저장</span>
+        <span><i style="background:var(--bad-soft)"></i>시간 겹침</span>
+        <span><i class="ol"></i>사람 부족</span>
+      </div>
+
+      <p class="error-text" id="gridError" hidden></p>
+
+      <div class="stats monthly-stats">
+        <div class="stat"><small>배정 인원</small><b id="statCount">0</b></div>
+        <div class="stat"><small>총 근무시간</small><b id="statHours">0</b></div>
+        <div class="stat"><small>담당자 미정</small><b id="statHole">0</b></div>
+        <div class="stat"><small>인원 부족</small><b id="statShort">0</b></div>
+      </div>
+
+      <h2 class="section-title">직원별 근무량 <small>10월 누적</small></h2>
+      <section class="card people-card">
+        <table class="people-table">
+          <colgroup><col><col><col></colgroup>
+          <thead><tr><th scope="col">직원</th><th scope="col" class="num-col">근무일</th><th scope="col" class="num-col">총 시간</th></tr></thead>
+          <tbody id="perPerson"></tbody>
+        </table>
+      </section>
+
+      <button class="btn btn-block" type="button" id="excelBtn">엑셀 근무표 붙여넣기</button>
+      <button class="btn btn-text" type="button" id="timeBtn">시간대 고치기 · 추가</button>
+      <a class="btn btn-text" id="backLink" href="schedule.html">이번 주 근무표 · 한 건씩 고치기 ›</a>
+      <span class="api-tag">GET /stores/{id}/shift-templates</span>
+      </div>
+
+      <div class="bottom-bar">
+        <button class="btn btn-primary btn-block" type="button" id="saveBtn">이대로 저장</button>
+        <span class="api-tag" style="margin-top:6px">POST /stores/{id}/shifts/bulk</span>
+      </div>
+    </main>
+
+    <nav class="tabbar" data-role="manager" data-active="schedule" data-role-param data-counts="approvals:3"></nav>
+  </div>
+
+  <!-- 근무표 초기화 확인 -->
+  <dialog class="sheet" id="resetSheet">
+    <div class="sheet-body">
+      <h3>근무표를 초기화할까요?</h3>
+      <p>10월의 직원 배정과 담당자 미정 칸을 모두 비워요.</p>
+      <p class="notice gray">전달사항과 매장의 오픈·미들·마감 시간 설정은 그대로 남아요.</p>
+      <p class="muted">저장 전 근무안만 비웁니다. 요청 기록에 연결된 근무가 있으면 초기화 저장은 제한돼요.</p>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn" type="button" data-close="resetSheet">취소</button>
+      <button class="btn btn-primary reset-btn" type="button" id="confirmReset">근무만 초기화</button>
+    </div>
+  </dialog>
+
+  <!-- 요일 패턴으로 채우기 -->
+  <dialog class="sheet" id="patternSheet">
+    <div class="sheet-body">
+      <h3>요일 패턴으로 채우기</h3>
+      <p class="muted">"한석휘는 월·수·금 오픈" 처럼 한 달치를 한 번에 넣어요.</p>
+      <div class="field">
+        <span class="label">누가</span>
+        <div class="tabs" id="pWho" role="group" aria-label="사람 선택"></div>
+      </div>
+      <div class="field">
+        <span class="label">어느 시간대</span>
+        <div class="tabs" id="pBand" role="group" aria-label="시간대 선택"></div>
+      </div>
+      <div class="field">
+        <span class="label">무슨 요일</span>
+        <div class="wdays" id="pDays" role="group" aria-label="요일 선택"></div>
+      </div>
+      <p class="notice gray" id="pPreview">요일을 골라주세요.</p>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn" type="button" data-close="patternSheet">닫기</button>
+      <button class="btn btn-primary" type="button" id="applyPattern">한 달에 넣기</button>
+    </div>
+  </dialog>
+
+  <!-- 엑셀로 넣기 -->
+  <dialog class="sheet" id="excelSheet">
+    <div class="sheet-body">
+      <h3>엑셀로 넣기</h3>
+      <p class="muted">쓰던 근무표를 그대로 붙여넣으세요. 첫 칸은 시간대 이름, 그다음 칸은 월~일 순서로 그날 일하는 사람이에요.</p>
+      <div class="field">
+        <label for="pasteWeek">어느 주에 넣을까요</label>
+        <select class="select" id="pasteWeek"></select>
+      </div>
+      <div class="field">
+        <label for="pasteBox">붙여넣기</label>
+        <textarea class="textarea paste" id="pasteBox" placeholder="&#9;월&#9;화&#9;수&#9;목&#9;금&#9;토&#9;일&#10;오픈&#9;&#9;&#9;한석휘&#10;미들&#9;김민&#9;이진호&#9;이진호&#9;김민&#9;박유진"></textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-sm" type="button" id="sampleBtn">예시 넣어보기</button>
+        <label class="btn btn-sm" for="csvFile" style="display:grid;place-content:center;cursor:pointer">파일 고르기</label>
+        <input type="file" id="csvFile" accept=".csv,.tsv,.txt" hidden>
+      </div>
+      <p class="notice gray" id="pastePreview" hidden></p>
+      <span class="api-tag">POST /stores/{id}/shifts/import</span>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn" type="button" data-close="excelSheet">닫기</button>
+      <button class="btn btn-primary" type="button" id="applyPaste">근무표에 넣기</button>
+    </div>
+  </dialog>
+
+  <!-- 시간대 고치기 · 추가 -->
+  <dialog class="sheet" id="timeSheet">
+    <div class="sheet-body">
+      <h3>시간대 고치기</h3>
+      <p class="muted">매장마다 부르는 이름도 시간도 다르니까 직접 정해요. 필요 인원을 적어두면 모자란 칸을 표시해 줘요.</p>
+      <div class="stack" id="timeFields"></div>
+      <button class="btn btn-sm" type="button" id="addBand">+ 시간대 추가</button>
+      <p class="error-text" id="timeError" hidden></p>
+      <span class="api-tag">PUT /stores/{id}/shift-templates</span>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn" type="button" data-close="timeSheet">닫기</button>
+      <button class="btn btn-primary" type="button" id="saveTimes">저장</button>
+    </div>
+  </dialog>
+
+  <!-- 저장 확인 -->
+  <dialog class="sheet" id="confirmSheet">
+    <div class="sheet-body">
+      <h3>이대로 저장할까요?</h3>
+      <p id="confirmText"></p>
+      <p class="notice">담당자 미정으로 둔 칸은 빈 근무로 저장돼요. 사장님이 급구로 한 번에 사람을 구할 수 있어요.</p>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn" type="button" data-close="confirmSheet">더 채울게요</button>
+      <button class="btn btn-primary" type="button" id="confirmSave">그대로 저장</button>
+    </div>
+  </dialog>
+
+  <!-- 저장 완료 -->
+  <dialog class="sheet" id="doneSheet">
+    <div class="sheet-body">
+      <h3>10월 근무표를 저장했어요</h3>
+      <p id="doneText"></p>
+      <p class="muted">직원들 캘린더에 바로 들어가고, 새 근무 알림이 가요.</p>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn" type="button" data-close="doneSheet">계속 고치기</button>
+      <a class="btn btn-primary" id="doneLink" href="schedule.html" style="display:grid;place-content:center">근무표 보기</a>
+    </div>
+  </dialog>
+
+  <script src="../js/common.js"></script>
+  <script>
+
+    const Y = 2026, M = 10, LAST_DAY = 31;
+
+    const STORE_DATA = {
+      A: { name: "성수점", staff: ["김계원", "이진호", "김민", "정재웅", "박유진"] },
+      B: { name: "건대점", staff: ["한석휘", "권예리", "배민혁", "인수연"] },
+    };
+    const AVAIL_HINT = {
+      "한석휘": "월/수/금 10–16 · 일 16–22",
+      "이진호": "월–목 16–22",
+      "인수연": "화/목 12–18 · 토/일 16–22",
+      "박유진": "수/금 12–22 · 토 16–22",
+      "배민혁": "화/목 10–16 · 토 16–22 · 일 12–18",
+      "정재웅": "월 12–18 · 토/일 10–16",
+      "김민": "월/수/금 10–22",
+      "배민혁": "화/목/주말 10–22",
+      "정재웅": "월–수 16–22 · 주말 10–16",
+    };
+    // 월요일=0 … 일요일=6, 직원이 등록한 근무 가능 시간
+    const AVAIL_WINDOWS = {
+      "한석휘": { 0:["10:00","16:00"], 2:["10:00","16:00"], 4:["10:00","16:00"], 6:["16:00","22:00"] },
+      "이진호": { 0:["16:00","22:00"], 1:["16:00","22:00"], 2:["16:00","22:00"], 3:["16:00","22:00"] },
+      "인수연": { 1:["12:00","18:00"], 3:["12:00","18:00"], 5:["16:00","22:00"], 6:["16:00","22:00"] },
+      "박유진": { 2:["12:00","22:00"], 4:["12:00","22:00"], 5:["16:00","22:00"] },
+      "배민혁": { 1:["10:00","16:00"], 3:["10:00","16:00"], 5:["16:00","22:00"], 6:["12:00","18:00"] },
+      "정재웅": { 0:["12:00","18:00"], 5:["10:00","16:00"], 6:["10:00","16:00"] },
+    };
+    // 다른 매장에 이미 잡힌 근무 (겹침 검사용 예시)
+    const OTHER_STORE = [
+      { who: "이진호", date: "2026-10-22", s: "18:00", e: "22:00", store: "건대점" },
+      { who: "한석휘", date: "2026-10-07", s: "10:00", e: "16:00", store: "성수점" },
+    ];
+    // 매장이 쓰는 시간대 — 이름·시간·개수·필요 인원 모두 매장이 정해요
+    const BANDS = {
+      A: [{ name: "오픈", s: "10:00", e: "16:00", need: 1 }, { name: "미들", s: "12:00", e: "18:00", need: 1 }, { name: "마감", s: "16:00", e: "22:00", need: 1 }],
+      B: [{ name: "오픈", s: "10:00", e: "16:00", need: 1 }, { name: "마감", s: "16:00", e: "22:00", need: 1 }],
+    };
+    // 지난달에 쓰던 요일 패턴 (0=월 … 6=일)
+    const PATTERNS = {
+      A: [
+        { who: "김계원", band: "오픈", days: [0, 2, 4] }, { who: "김민", band: "오픈", days: [1, 3, 6] },
+        { who: "정재웅", band: "오픈", days: [5] },
+        { who: "정재웅", band: "미들", days: [0, 2, 6] }, { who: "박유진", band: "미들", days: [1, 3, 4] },
+        { who: "이진호", band: "마감", days: [0, 1, 2, 3] }, { who: "김민", band: "마감", days: [4] },
+        // 주말은 사람을 더 넣어요 (토요일 마감 3명)
+        { who: "박유진", band: "마감", days: [4, 5] }, { who: "김계원", band: "마감", days: [5, 6] },
+        { who: "정재웅", band: "마감", days: [5] },
+      ],
+      // 한석휘·이진호처럼 다른 매장 근무가 있는 사람은 시간이 안 겹치는 요일에만 넣었어요
+      B: [
+        { who: "한석휘", band: "오픈", days: [0, 2, 4] }, { who: "권예리", band: "오픈", days: [1, 3] },
+        { who: "배민혁", band: "오픈", days: [5, 6] },
+        { who: "인수연", band: "마감", days: [0, 1, 2] }, { who: "배민혁", band: "마감", days: [3, 4] },
+        { who: "권예리", band: "마감", days: [5, 6] },
+      ],
+    };
+
+    const NONE = "미정";           // 담당자 미정 = 빈 근무
+    const WD = ["월", "화", "수", "목", "금", "토", "일"];
+
+    // 한 달을 월요일 시작 주 블록으로 나눠요 (다른 달 날짜는 null)
+    const WEEKS = (() => {
+      const offset = (new Date(Y, M - 1, 1).getDay() + 6) % 7;
+      const out = [];
+      for (let start = 1 - offset; start <= LAST_DAY; start += 7) {
+        out.push(Array.from({ length: 7 }, (_, i) => {
+          const d = start + i;
+          return d >= 1 && d <= LAST_DAY ? toISO(Y, M, d) : null;
+        }));
+      }
+      return out;
+    })();
+    const ALL_DAYS = WEEKS.flat().filter(Boolean);
+    // 한 달 채우기의 본보기가 되는 주 - 월~일이 다 있는 첫 주 (10월은 1일이 목요일이라 둘째 주)
+    const FULL_WEEK = Math.max(0, WEEKS.findIndex((w) => w.every(Boolean)));
+    // 주 블록은 늘 월~일 7칸이라 칸 번호가 곧 요일 (0=월 … 6=일)
+    const datesOn = (days) => WEEKS.flatMap((week) => days.map((i) => week[i]).filter(Boolean));
+
+    const isOwner = params.get("role") === "owner";
+    let picked = null;
+    let plan = {};    // "시간대|날짜" → [이름, ...]
+    let clashes = {}; // "시간대|날짜" → Set(이름)
+    let clashNote = "";
+    let shortCells = 0;
+    let currentWeek = FULL_WEEK;
+    let selectedMonthDate = WEEKS[FULL_WEEK].find(Boolean);
+    let STAFF, bands, storeKey;
+
+    const cellKey = (band, date) => `${band}|${date}`;
+    const at = (band, date) => plan[cellKey(band, date)] || [];
+    const overlap = (a1, a2, b1, b2) => a1 < b2 && b1 < a2;
+    const bandOf = (name) => bands.find((b) => b.name === name);
+    const bandNo = (name) => Math.max(0, bands.findIndex((b) => b.name === name));
+    const isShort = (band, date) => at(band.name, date).filter((w) => w !== NONE).length < band.need;
+    const weekdayIndex = (date) => (new Date(`${date}T00:00:00`).getDay() + 6) % 7;
+    const canAssign = (who, band, date) => {
+      const window = AVAIL_WINDOWS[who]?.[weekdayIndex(date)];
+      return !window || (window[0] <= band.s && band.e <= window[1]);
+    };
+
+    function useStore(key) {
+      STAFF = STORE_DATA[key].staff;
+      bands = BANDS[key];
+      picked = STAFF[0];
+      plan = {};
+      document.querySelectorAll(".account-meta small").forEach((el) => (el.textContent = `${STORE_DATA[key].name} 근무표`));
+      const back = `schedule.html${isOwner ? `?role=owner&store=${key}` : ""}`;
+      document.getElementById("backLink").href = back;
+      document.getElementById("doneLink").href = back;
+      if (isOwner) {
+        document.title = "근무표 | 사장";
+        document.querySelector(".account-meta b").textContent = "김효주 사장님";
+      }
+    }
+
+    storeKey = mountStoreSwitch((k) => { storeKey = k; useStore(k); applyPatterns(); render(); });
+    if (!isOwner) storeKey = "A";
+    useStore(storeKey);
+
+    function applyPatterns() {
+      plan = {};
+      PATTERNS[storeKey].forEach(({ who, band, days }) => {
+        if (!bandOf(band) || !STAFF.includes(who)) return;
+        datesOn(days).forEach((d) => {
+          const k = cellKey(band, d);
+          plan[k] = [...(plan[k] || []), who];
+        });
+      });
+    }
+
+    // 같은 사람이 같은 날 시간이 겹치게 들어갔는지 + 다른 매장 근무와 겹치는지
+    function checkClashes() {
+      clashes = {};
+      clashNote = "";
+      const mark = (band, date, who) => {
+        const k = cellKey(band, date);
+        (clashes[k] = clashes[k] || new Set()).add(who);
+      };
+      ALL_DAYS.forEach((date) => {
+        bands.forEach((b1, i) => {
+          at(b1.name, date).forEach((who) => {
+            if (who === NONE) return;
+            bands.slice(i + 1).forEach((b2) => {
+              if (at(b2.name, date).includes(who) && overlap(b1.s, b1.e, b2.s, b2.e)) {
+                mark(b1.name, date, who); mark(b2.name, date, who);
+                clashNote = clashNote || `${who}님이 ${fmtDate(date)}에 ${b1.name}과 ${b2.name}에 같이 들어가 있어요. 시간이 겹쳐요.`;
+              }
+            });
+            const hit = OTHER_STORE.find((x) => x.store !== STORE_DATA[storeKey].name && x.who === who && x.date === date && overlap(b1.s, b1.e, x.s, x.e));
+            if (hit) {
+              mark(b1.name, date, who);
+              clashNote = clashNote || `${who}님은 ${fmtDate(date)}에 ${hit.store}에서 ${hit.s}–${hit.e} 근무가 있어요.`;
+            }
+          });
+        });
+      });
+    }
+
+    function renderPalette() {
+      document.getElementById("palette").innerHTML =
+        STAFF.map((n) => `<button type="button" data-who="${n}" aria-pressed="${n === picked}">${n}</button>`).join("") +
+        `<button type="button" data-who="${NONE}" aria-pressed="${picked === NONE}">담당자 미정</button>`;
+      document.getElementById("pickedLabel").textContent = picked === NONE ? "담당자 미정" : picked;
+      document.getElementById("availabilityHint").innerHTML = picked === NONE
+        ? "담당자를 정하지 않고 <b>빈 근무</b>로 저장해요."
+        : `<b>등록된 근무 가능 시간</b> · ${AVAIL_HINT[picked] || "시간 정보 없음"}`;
+    }
+
+    function renderMonthOverview() {
+      const header = WD.map((day, i) => `<div class="month-dow ${i === 6 ? "sun" : ""}">${day}</div>`).join("");
+      const cells = WEEKS.flatMap((week) => week).map((date, i) => {
+        if (!date) return `<span class="month-day empty"></span>`;
+        const issues = bands.filter((band) => isShort(band, date)).length;
+        const shiftSummary = bands.map((band) => {
+          const workers = at(band.name, date).filter((who) => who !== NONE);
+          const initials = workers.map((who) => shortName(who).slice(0, 1)).join("·");
+          return `<span class="mini-shift b${bandNo(band.name)} ${workers.length < band.need ? "missing" : ""}">
+            <i>${band.name.slice(0, 1)}</i><span>${initials || "–"}</span>
+          </span>`;
+        }).join("");
+        const fullLabel = bands.map((band) => {
+          const workers = at(band.name, date).filter((who) => who !== NONE);
+          return `${band.name} ${workers.join(", ") || "미배정"}`;
+        }).join(", ");
+        return `<button type="button" class="month-day ${i % 7 === 6 ? "sun" : ""} ${issues ? "issue" : ""}"
+                  data-month-date="${date}" aria-pressed="${date === selectedMonthDate}" aria-label="${fmtDate(date)} ${fullLabel}">
+          <b>${Number(date.slice(-2))}</b>
+          ${shiftSummary}
+        </button>`;
+      }).join("");
+      document.getElementById("monthGrid").innerHTML = header + cells;
+      document.getElementById("monthDayTitle").textContent = fmtDate(selectedMonthDate);
+      document.getElementById("monthDayShifts").innerHTML = bands.map((band) => {
+        const workers = at(band.name, selectedMonthDate).filter((who) => who !== NONE);
+        return `<div class="month-detail-row">
+          <span class="b${bandNo(band.name)}"><b>${band.name}</b><small>${band.s}–${band.e}</small></span>
+          <b class="${workers.length < band.need ? "unfilled" : ""}">${workers.length ? workers.join(" · ") : `${band.need}명 필요`}</b>
+        </div>`;
+      }).join("");
+    }
+
+    function slotHTML(band, date) {
+      const k = cellKey(band.name, date);
+      const list = at(band.name, date);
+      const bad = clashes[k];
+      const chips = list.map((who) =>
+        `<span class="chip b${bandNo(band.name)} ${who === NONE ? "none" : ""} ${bad && bad.has(who) ? "clash" : ""}" data-chip="${k}" data-name="${who}">${who === NONE ? "미정" : who}</span>`
+      ).join("");
+      return `<button type="button" class="shift-slot b${bandNo(band.name)} ${isShort(band, date) ? "short" : ""}" data-cell="${k}"
+                aria-label="${band.name} ${fmtDate(date)} ${list.join(", ") || "비어 있음"}">
+        <span class="slot-time b${bandNo(band.name)}"><b>${band.name}</b><small>${band.s.slice(0,5)}–${band.e.slice(0,5)}</small></span>
+        <span class="slot-workers">${chips || `<span class="slot-empty">${band.need}명 필요 · 아직 미배정</span>`}</span>
+        <span class="slot-add" aria-hidden="true">+</span>
+      </button>`;
+    }
+
+    function renderWeeks() {
+      const week = WEEKS[currentWeek];
+      const realDays = week.filter(Boolean);
+      document.getElementById("weekNumber").textContent = `${currentWeek + 1}주차`;
+      document.getElementById("weekRange").textContent = `${fmtDate(realDays[0])} – ${fmtDate(realDays[realDays.length - 1])}`;
+      document.getElementById("prevWeek").disabled = currentWeek === 0;
+      document.getElementById("nextWeek").disabled = currentWeek === WEEKS.length - 1;
+      document.getElementById("copyNextWeek").disabled = currentWeek === WEEKS.length - 1;
+
+      document.getElementById("weeks").innerHTML = `<div class="week-days">${week.map((date, i) => {
+        if (!date) return "";
+        const assigned = bands.reduce((n, b) => n + at(b.name, date).filter((x) => x !== NONE).length, 0);
+        const issues = bands.filter((b) => isShort(b, date)).length;
+        return `<article class="day-card">
+          <div class="day-head"><div><b class="${i === 6 ? "sun" : ""}">${Number(date.slice(-2))}일 ${WD[i]}요일</b><small> · ${assigned}명 배정</small></div><span class="day-state ${issues ? "short" : ""}">${issues ? `${issues}칸 부족` : "배정 완료"}</span></div>
+          <div>${bands.map((b) => slotHTML(b, date)).join("")}</div>
+        </article>`;
+      }).join("")}</div>`;
+    }
+
+    function renderStats() {
+      const all = Object.values(plan).flat();
+      const assigned = all.filter((who) => who !== NONE);
+      const per = {};
+      let hours = 0;
+      shortCells = 0;
+      bands.forEach((b) => ALL_DAYS.forEach((d) => {
+        if (isShort(b, d)) shortCells += 1;
+        at(b.name, d).forEach((who) => {
+          if (who === NONE) return;
+          hours += hoursBetween(b.s, b.e);
+          per[who] = per[who] || { n: 0, h: 0 };
+          per[who].n += 1;
+          per[who].h += hoursBetween(b.s, b.e);
+        });
+      }));
+      document.getElementById("statCount").textContent = assigned.length;
+      document.getElementById("statHours").textContent = hours;
+      document.getElementById("statHole").textContent = all.filter((w) => w === NONE).length;
+      document.getElementById("statShort").textContent = shortCells;
+
+      const week = WEEKS[currentWeek].filter(Boolean);
+      const weekAssigned = week.reduce((sum, d) => sum + bands.reduce((n, b) => n + at(b.name, d).filter((w) => w !== NONE).length, 0), 0);
+      const weekIssues = week.reduce((sum, d) => sum + bands.filter((b) => isShort(b, d)).length, 0);
+      document.getElementById("weekAssigned").textContent = `${weekAssigned}명`;
+      document.getElementById("weekIssues").textContent = `${weekIssues}개`;
+
+      const rows = STAFF.map((n) => [n, per[n] || { n: 0, h: 0 }]).sort((a, b) => b[1].h - a[1].h);
+      document.getElementById("perPerson").innerHTML = rows.map(([n, v]) => `
+        <tr>
+          <td><span class="person-name"><span class="avatar">${shortName(n)}</span><b>${n}</b></span></td>
+          <td class="num-col">${v.n}일</td>
+          <td class="num-col hours">${v.h}시간</td>
+        </tr>`).join("");
+
+      const err = document.getElementById("gridError");
+      err.hidden = !clashNote;
+      err.textContent = clashNote ? `${clashNote} 빨간 이름을 고쳐주세요.` : "";
+    }
+
+    function render() { checkClashes(); renderPalette(); renderMonthOverview(); renderWeeks(); renderStats(); }
+
+    function setScheduleView(mode) {
+      const month = mode === "month";
+      document.getElementById("monthView").hidden = !month;
+      document.getElementById("editView").hidden = month;
+      document.querySelectorAll("[data-schedule-view]").forEach((button) =>
+        button.setAttribute("aria-pressed", String(button.dataset.scheduleView === mode)));
+    }
+    document.getElementById("scheduleView").addEventListener("click", (e) => {
+      const button = e.target.closest("[data-schedule-view]");
+      if (button) setScheduleView(button.dataset.scheduleView);
+    });
+    document.getElementById("monthGrid").addEventListener("click", (e) => {
+      const day = e.target.closest("[data-month-date]");
+      if (!day) return;
+      selectedMonthDate = day.dataset.monthDate;
+      renderMonthOverview();
+    });
+    function editSelectedMonthDay() {
+      currentWeek = WEEKS.findIndex((week) => week.includes(selectedMonthDate));
+      setScheduleView("edit");
+      renderWeeks();
+      renderStats();
+    }
+    document.getElementById("editSelectedDay").addEventListener("click", editSelectedMonthDay);
+    document.getElementById("openEditBtn").addEventListener("click", editSelectedMonthDay);
+
+    const resetSheet = document.getElementById("resetSheet");
+    document.getElementById("resetBtn").addEventListener("click", () => resetSheet.showModal());
+    document.getElementById("confirmReset").addEventListener("click", () => {
+      plan = {};
+      resetSheet.close();
+      render();
+      toast("근무 배정을 모두 초기화했어요");
+    });
+
+    document.getElementById("palette").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-who]");
+      if (!b) return;
+      picked = b.dataset.who;
+      renderPalette();
+    });
+
+    document.getElementById("weeks").addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-chip]");
+      const cell = e.target.closest("[data-cell]");
+      if (chip) {
+        plan[chip.dataset.chip] = (plan[chip.dataset.chip] || []).filter((n) => n !== chip.dataset.name);
+        if (!plan[chip.dataset.chip].length) delete plan[chip.dataset.chip];
+      } else if (cell) {
+        const k = cell.dataset.cell;
+        const list = plan[k] || [];
+        if (list.includes(picked)) {
+          plan[k] = list.filter((n) => n !== picked);
+          if (!plan[k].length) delete plan[k];
+        } else {
+          const [bandName, date] = k.split("|");
+          const band = bandOf(bandName);
+          if (picked !== NONE && !canAssign(picked, band, date)) {
+            toast(`${picked}님이 등록한 근무 가능 시간과 맞지 않아요`);
+            return;
+          }
+          const sameDay = bands.find((b) => b.name !== bandName && at(b.name, date).includes(picked) && overlap(b.s, b.e, band.s, band.e));
+          if (picked !== NONE && sameDay) {
+            toast(`${picked}님은 같은 날 ${sameDay.name} 근무와 시간이 겹쳐요`);
+            return;
+          }
+          const other = OTHER_STORE.find((x) => x.who === picked && x.date === date && overlap(band.s, band.e, x.s, x.e));
+          if (other) {
+            toast(`${picked}님은 그 시간에 ${other.store} 근무가 있어요`);
+            return;
+          }
+          plan[k] = [...list, picked];
+        }
+      } else return;
+      render();
+    });
+
+    document.getElementById("prevWeek").addEventListener("click", () => {
+      if (currentWeek === 0) return;
+      currentWeek -= 1;
+      render();
+    });
+    document.getElementById("nextWeek").addEventListener("click", () => {
+      if (currentWeek === WEEKS.length - 1) return;
+      currentWeek += 1;
+      render();
+    });
+    document.getElementById("copyNextWeek").addEventListener("click", () => {
+      if (currentWeek === WEEKS.length - 1) return;
+      const copied = copyWeek(currentWeek, [currentWeek + 1]);
+      toast(`다음 주에 ${copied}명을 복사했어요`);
+    });
+
+    // 한 주를 다른 주들에 그대로 옮겨 그려요
+    function copyWeek(fromIdx, toIdxs) {
+      const from = WEEKS[fromIdx];
+      let n = 0;
+      toIdxs.forEach((ti) => WEEKS[ti].forEach((d, i) => {
+        if (!d || !from[i]) return;
+        bands.forEach((b) => {
+          const src = at(b.name, from[i]);
+          if (src.length) { plan[cellKey(b.name, d)] = [...src]; n += src.length; }
+          else delete plan[cellKey(b.name, d)];
+        });
+      }));
+      render();
+      return n;
+    }
+
+    document.getElementById("fillMonth").addEventListener("click", () => {
+      const src = WEEKS[currentWeek];
+      const srcDays = src.filter(Boolean);
+      copyWeek(currentWeek, WEEKS.map((_, i) => i).filter((i) => i !== currentWeek));
+      toast(`${fmtDate(srcDays[0])}–${fmtDate(srcDays[srcDays.length - 1])} 주를 한 달 전체에 복사했어요`);
+    });
+
+    document.getElementById("copyMonth").addEventListener("click", () => {
+      applyPatterns();
+      render();
+      toast("지난달 근무 패턴을 그대로 가져왔어요");
+    });
+
+    // ---------- 요일 패턴으로 채우기 ----------
+    const patternSheet = document.getElementById("patternSheet");
+    let pWho = null, pBand = null, pDays = [];
+
+    function renderPattern() {
+      document.getElementById("pWho").innerHTML =
+        STAFF.map((n) => `<button type="button" data-p-who="${n}" aria-pressed="${n === pWho}">${n}</button>`).join("") +
+        `<button type="button" data-p-who="${NONE}" aria-pressed="${pWho === NONE}">담당자 미정</button>`;
+      document.getElementById("pBand").innerHTML =
+        bands.map((b) => `<button type="button" data-p-band="${b.name}" aria-pressed="${b.name === pBand}">${b.name} ${b.s.slice(0, 2)}–${b.e.slice(0, 2)}</button>`).join("");
+      document.getElementById("pDays").innerHTML =
+        WD.map((d, i) => `<button type="button" data-p-day="${i}" aria-pressed="${pDays.includes(i)}">${d}</button>`).join("");
+      const n = datesOn(pDays).length;
+      document.getElementById("pPreview").textContent = !pDays.length
+        ? "요일을 골라주세요."
+        : `${pWho} · ${pBand} · ${pDays.map((i) => WD[i]).join("·")} → 10월에 ${n}칸이 채워져요.`;
+    }
+
+    document.getElementById("patternBtn").addEventListener("click", () => {
+      pWho = picked || STAFF[0];
+      pBand = bands[0].name;
+      pDays = [];
+      renderPattern();
+      patternSheet.showModal();
+    });
+    patternSheet.addEventListener("click", (e) => {
+      const w = e.target.closest("[data-p-who]");
+      const b = e.target.closest("[data-p-band]");
+      const d = e.target.closest("[data-p-day]");
+      if (w) pWho = w.dataset.pWho;
+      else if (b) pBand = b.dataset.pBand;
+      else if (d) {
+        const i = Number(d.dataset.pDay);
+        pDays = pDays.includes(i) ? pDays.filter((x) => x !== i) : [...pDays, i].sort();
+      } else return;
+      renderPattern();
+    });
+    document.getElementById("applyPattern").addEventListener("click", () => {
+      if (!pDays.length) { toast("요일을 하나는 골라주세요"); return; }
+      let n = 0;
+      datesOn(pDays).forEach((date) => {
+        const k = cellKey(pBand, date);
+        const list = plan[k] || [];
+        if (list.includes(pWho)) return;
+        plan[k] = [...list, pWho];
+        n += 1;
+      });
+      patternSheet.close();
+      render();
+      toast(`${pWho}님을 ${n}칸에 넣었어요`);
+    });
+
+    // ---------- 엑셀로 넣기 ----------
+    const excelSheet = document.getElementById("excelSheet");
+    const pasteBox = document.getElementById("pasteBox");
+    const preview = document.getElementById("pastePreview");
+
+    function targetWeek() { return WEEKS[Number(document.getElementById("pasteWeek").value)]; }
+
+    function parsePaste(text) {
+      const week = targetWeek();
+      const rows = [];
+      const unknown = new Set();
+      let skipped = 0;
+      text.replace(/\r/g, "").split("\n").forEach((line) => {
+        if (!line.trim()) return;
+        const cells = line.split(/\t|,/);
+        const band = cells.shift().trim();
+        if (!bandOf(band)) { if (band && band !== "시간대") skipped += 1; return; }
+        cells.slice(0, 7).forEach((cell, i) => {
+          if (!week[i]) return;
+          const list = [];
+          cell.split(/[\s·/]+/).map((n) => n.trim()).filter(Boolean).forEach((n) => {
+            if (STAFF.includes(n)) list.push(n);
+            else if (n === NONE || n === "?") list.push(NONE);
+            else unknown.add(n);
+          });
+          if (list.length) rows.push([cellKey(band, week[i]), list]);
+        });
+      });
+      return { rows, unknown: [...unknown], skipped };
+    }
+
+    function showPreview() {
+      const { rows, unknown, skipped } = parsePaste(pasteBox.value);
+      preview.hidden = !pasteBox.value.trim();
+      const count = rows.reduce((n, [, list]) => n + list.length, 0);
+      preview.textContent = `${count}명을 찾았어요.`
+        + (unknown.length ? ` 이 매장 직원이 아닌 이름은 건너뛰어요: ${unknown.join(", ")}` : "")
+        + (skipped ? ` 시간대를 못 알아본 줄 ${skipped}개는 건너뛰어요.` : "");
+    }
+
+    document.getElementById("excelBtn").addEventListener("click", () => {
+      document.getElementById("pasteWeek").innerHTML = WEEKS.map((week, i) => {
+        const days = week.filter(Boolean);
+        return `<option value="${i}">${i + 1}주차 (${Number(days[0].split("-")[2])}일–${Number(days[days.length - 1].split("-")[2])}일)</option>`;
+      }).join("");
+      showPreview();
+      excelSheet.showModal();
+    });
+    pasteBox.addEventListener("input", showPreview);
+    document.getElementById("pasteWeek").addEventListener("change", showPreview);
+    document.getElementById("sampleBtn").addEventListener("click", () => {
+      pasteBox.value = [["", ...WD].join("\t")].concat(
+        bands.map((b, bi) => [b.name, ...WD.map((_, d) => STAFF[(d + bi) % STAFF.length])].join("\t"))
+      ).join("\n");
+      showPreview();
+    });
+    document.getElementById("csvFile").addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => { pasteBox.value = reader.result; showPreview(); };
+      reader.readAsText(file, "utf-8");
+    });
+    document.getElementById("applyPaste").addEventListener("click", () => {
+      const { rows } = parsePaste(pasteBox.value);
+      if (!rows.length) { preview.hidden = false; preview.textContent = "넣을 사람을 찾지 못했어요. 첫 칸이 시간대 이름인지 봐주세요."; return; }
+      rows.forEach(([k, list]) => (plan[k] = list));
+      excelSheet.close();
+      render();
+      toast(`${rows.reduce((n, [, l]) => n + l.length, 0)}명을 근무표에 넣었어요`);
+    });
+
+    // ---------- 시간대 고치기 · 추가 ----------
+    const timeSheet = document.getElementById("timeSheet");
+    let draft = [];
+
+    function renderTimeFields() {
+      document.getElementById("timeFields").innerHTML = draft.map((b, i) => `
+        <div class="band-row">
+          <div class="grow stack" style="gap:6px">
+            <input class="input" id="n-${i}" value="${escapeHTML(b.name)}" maxlength="10" aria-label="시간대 이름" placeholder="이름 (예: 오픈)">
+            <div class="btn-row">
+              <input class="input" type="time" id="s-${i}" step="1800" value="${b.s}" aria-label="시작">
+              <input class="input" type="time" id="e-${i}" step="1800" value="${b.e}" aria-label="종료">
+            </div>
+            <div class="field">
+              <label for="q-${i}">필요 인원</label>
+              <input class="input" type="number" id="q-${i}" min="1" max="9" value="${b.need}">
+            </div>
+          </div>
+          <button class="icon-btn" type="button" data-del="${i}" aria-label="${escapeHTML(b.name)} 시간대 삭제">✕</button>
+        </div>`).join("");
+    }
+
+    document.getElementById("timeBtn").addEventListener("click", () => {
+      draft = bands.map((b) => ({ ...b }));
+      document.getElementById("timeError").hidden = true;
+      renderTimeFields();
+      timeSheet.showModal();
+    });
+    document.getElementById("timeFields").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-del]");
+      if (!b) return;
+      draft.splice(Number(b.dataset.del), 1);
+      renderTimeFields();
+    });
+    document.getElementById("addBand").addEventListener("click", () => {
+      draft.push({ name: "", s: "10:00", e: "16:00", need: 1 });
+      renderTimeFields();
+    });
+    document.getElementById("saveTimes").addEventListener("click", () => {
+      const err = document.getElementById("timeError");
+      const next = [];
+      for (let i = 0; i < draft.length; i += 1) {
+        const name = document.getElementById(`n-${i}`).value.trim();
+        const s = document.getElementById(`s-${i}`).value;
+        const e = document.getElementById(`e-${i}`).value;
+        const need = Number(document.getElementById(`q-${i}`).value);
+        if (!name || name.length > 10 || name.includes("|") || next.some((b) => b.name === name) || !s || !e || e <= s || !Number.isInteger(need) || need < 1 || need > 9) {
+          err.textContent = "이름은 중복 없이 10자 이내( | 제외), 종료는 시작보다 늦게, 인원은 1~9명으로 입력해 주세요.";
+          err.hidden = false;
+          return;
+        }
+        next.push({ name, s, e, need });
+      }
+      if (!next.length) { err.textContent = "시간대가 하나는 있어야 해요."; err.hidden = false; return; }
+      Object.keys(plan).forEach((k) => { if (!next.some((b) => b.name === k.split("|")[0])) delete plan[k]; });
+      BANDS[storeKey] = next;
+      bands = next;
+      timeSheet.close();
+      render();
+      toast("시간대를 바꿨어요");
+    });
+
+    // ---------- 저장 ----------
+    function saveNow() {
+      const all = Object.values(plan).flat();
+      const empty = all.filter((w) => w === NONE).length;
+      document.getElementById("doneText").textContent =
+        `10월 근무 ${all.length}개를 저장했어요.` + (empty ? ` 담당자 미정 ${empty}개는 급구로 올릴 수 있어요.` : "");
+      document.getElementById("doneSheet").showModal();
+    }
+
+    document.getElementById("saveBtn").addEventListener("click", () => {
+      if (clashNote) { document.getElementById("gridError").hidden = false; toast("겹치는 근무부터 고쳐주세요"); return; }
+      const all = Object.values(plan).flat();
+      if (!all.length) { saveNow(); return; }
+      const empty = all.filter((w) => w === NONE).length;
+      if (empty || shortCells) {
+        document.getElementById("confirmText").textContent =
+          [empty ? `담당자 미정인 칸이 ${empty}개` : "", shortCells ? `사람이 부족한 칸이 ${shortCells}개` : ""]
+            .filter(Boolean).join(", ") + " 있어요.";
+        document.getElementById("confirmSheet").showModal();
+        return;
+      }
+      saveNow();
+    });
+    document.getElementById("confirmSave").addEventListener("click", () => {
+      document.getElementById("confirmSheet").close();
+      saveNow();
+    });
+
+    document.querySelectorAll("[data-close]").forEach((b) =>
+      b.addEventListener("click", () => document.getElementById(b.dataset.close).close()));
+
+    applyPatterns();
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>직원 | 점장</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .apply-row { display: flex; align-items: center; gap: 12px; padding: 16px 18px; }
+    .apply-row .grow { flex: 1; min-width: 0; }
+    .member-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <header class="topbar">
+      <h1>직원</h1>
+      <span class="account-meta"><b>배스킨라빈스</b><small>성수점</small></span>
+    </header>
+
+    <main class="content">
+      <div class="segmented" id="storeSwitch" hidden></div>
+      <div id="applyBox">
+        <h2 class="section-title">참여 신청 <small id="applyCount"></small></h2>
+        <section class="card tight" id="applyList" style="margin-top:10px"></section>
+      </div>
+
+      <h2 class="section-title">직원 <small id="memberCount"></small></h2>
+      <section class="card tight" id="memberList"></section>
+      <span class="api-tag">GET /stores/{id}/members · PUT /stores/{id}/members/{userId}/status</span>
+      <p class="help" id="roleHelp" style="text-align:center">점장 임명은 사장님이 매장 설정에서 해요.</p>
+    </main>
+
+    <nav class="tabbar" data-role="manager" data-active="staff" data-role-param data-counts="approvals:3"></nav>
+  </div>
+
+  <dialog class="sheet" id="memberSheet">
+    <form method="dialog">
+      <div class="sheet-body">
+        <div class="row">
+          <span class="avatar" id="mAvatar"></span>
+          <div><h3 id="mName"></h3><p class="muted num" id="mPhone"></p></div>
+        </div>
+        <div class="member-stats" id="mStats"></div>
+        <button class="btn btn-danger btn-block" type="button" id="kickBtn">매장에서 내보내기</button>
+        <p class="help">내보내도 지난 근무와 요청 기록은 남아요. 앞으로의 근무는 담당자 미정이 돼요.</p>
+        <span class="api-tag">DELETE /stores/{id}/members/{userId}</span>
+      </div>
+      <div class="sheet-actions" style="grid-template-columns:1fr">
+        <button class="btn" value="close">닫기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="kickSheet">
+    <form method="dialog">
+      <div class="sheet-body">
+        <h3 id="kickTitle"></h3>
+        <p id="kickNote"></p>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn" value="no">취소</button>
+        <button class="btn btn-danger" value="yes">내보내기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="../js/common.js"></script>
+  <script>
+    // 매장별 예시 데이터. 사장은 ?role=owner로 두 매장을 전환해서 봐요.
+    const STORE_STAFF = {
+      A: { name: "성수점", applies: [{ id: "seokhwi", name: "한석휘", phone: "010-****-1111", at: "9/14 신청" }], members: null },
+      B: { name: "건대점", applies: [], members: [
+        { id: "seokhwi", name: "한석휘", role: "알바생", phone: "010-1111-2222", month: 72, count: 12, cover: 1, upcoming: 5 },
+        { id: "yeri", name: "권예리", role: "알바생", phone: "010-9090-1234", month: 66, count: 11, cover: 2, upcoming: 6 },
+        { id: "minhyeok", name: "배민혁", role: "알바생", phone: "010-6767-3434", month: 58, count: 10, cover: 1, upcoming: 4 },
+        { id: "suyeon", name: "인수연", role: "알바생", phone: "010-7878-2323", month: 48, count: 8, cover: 0, upcoming: 3 },
+      ] },
+    };
+    STORE_STAFF.A.members = [
+      { id: "gyewon", name: "김계원", role: "점장", phone: "010-3333-4444", month: 96, count: 14, cover: 0, upcoming: 6 },
+      { id: "jinho", name: "이진호", role: "알바생", phone: "010-2222-3131", month: 64, count: 10, cover: 4, upcoming: 4 },
+      { id: "kimmin", name: "김민", role: "알바생", phone: "010-4141-5252", month: 70, count: 12, cover: 2, upcoming: 5 },
+      { id: "jaewoong", name: "정재웅", role: "알바생", phone: "010-5656-4545", month: 82, count: 14, cover: 2, upcoming: 6 },
+      { id: "yujin", name: "박유진", role: "알바생", phone: "010-4545-1212", month: 78, count: 13, cover: 3, upcoming: 6 },
+    ];
+    let current = null;
+    const isOwner = params.get("role") === "owner";
+    let applies, members;
+
+    function useStore(key) {
+      const d = STORE_STAFF[key];
+      applies = d.applies;
+      members = d.members;
+      document.querySelectorAll(".account-meta small").forEach((el) => (el.textContent = isOwner ? `${d.name} 직원` : d.name));
+      const help = document.getElementById("roleHelp");
+      help.innerHTML = isOwner
+        ? `점장 임명·해제는 <a href="../owner/settings.html">매장 설정</a>에서 해요.${key === "B" ? " 건대점은 점장이 없어서 사장님이 직접 관리해요." : ""}`
+        : "점장 임명은 사장님이 매장 설정에서 해요.";
+    }
+
+    let storeKey = mountStoreSwitch((k) => { storeKey = k; useStore(k); render(); });
+    if (!isOwner) storeKey = "A";
+    useStore(storeKey);
+
+    function render() {
+      document.getElementById("applyBox").hidden = applies.length === 0;
+      document.getElementById("applyCount").textContent = `${applies.length}명`;
+      document.getElementById("applyList").innerHTML = applies.map((a) => `
+        <div class="apply-row">
+          <span class="avatar">${shortName(a.name)}</span>
+          <div class="grow"><b>${a.name}</b><p class="help num">${a.phone} · ${a.at}</p></div>
+          <button class="btn btn-sm" type="button" data-reject="${a.id}">거절</button>
+          <button class="btn btn-sm btn-primary" type="button" data-accept="${a.id}">승인</button>
+        </div>`).join("");
+
+      document.getElementById("memberCount").textContent = `${members.length}명`;
+      document.getElementById("memberList").innerHTML = members.map((m) => `
+        <button class="list-item" type="button" data-id="${m.id}">
+          <span class="avatar">${shortName(m.name)}</span>
+          <div class="grow"><p class="title">${m.name}</p><p class="desc num">이번 달 ${m.month}시간</p></div>
+          ${m.role === "점장" ? `<span class="pill ok">점장</span>` : ""}<span class="chev" aria-hidden="true">›</span>
+        </button>`).join("");
+    }
+
+    document.getElementById("applyList").addEventListener("click", (e) => {
+      const acc = e.target.closest("[data-accept]");
+      const rej = e.target.closest("[data-reject]");
+      if (!acc && !rej) return;
+      const id = (acc || rej).dataset.accept || (acc || rej).dataset.reject;
+      const a = applies.splice(applies.findIndex((x) => x.id === id), 1)[0];
+      if (acc) members.push({ id: a.id, name: a.name, role: "알바생", phone: "010-1111-2222", month: 0, count: 0, cover: 0, upcoming: 0 });
+      render();
+      toast(acc ? `${a.name}님이 ${STORE_STAFF[storeKey].name} 직원이 됐어요` : `${a.name}님의 신청을 거절했어요`);
+    });
+
+    const memberSheet = document.getElementById("memberSheet");
+    const kickSheet = document.getElementById("kickSheet");
+
+    document.getElementById("memberList").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-id]");
+      if (!b) return;
+      current = members.find((m) => m.id === b.dataset.id);
+      document.getElementById("mAvatar").textContent = shortName(current.name);
+      document.getElementById("mName").textContent = `${current.name} · ${current.role}`;
+      document.getElementById("mPhone").textContent = current.phone;
+      document.getElementById("mStats").innerHTML = `
+        <div class="stat"><small>이번 달</small><b>${current.month}h</b></div>
+        <div class="stat"><small>근무</small><b>${current.count}회</b></div>
+        <div class="stat"><small>대타 해줌</small><b>${current.cover}회</b></div>`;
+      document.getElementById("kickBtn").hidden = current.role === "점장";
+      memberSheet.showModal();
+    });
+
+    document.getElementById("kickBtn").addEventListener("click", () => {
+      memberSheet.close();
+      document.getElementById("kickTitle").textContent = `${current.name}님을 내보낼까요?`;
+      document.getElementById("kickNote").textContent = current.upcoming
+        ? `앞으로 잡힌 근무 ${current.upcoming}개가 담당자 미정으로 바뀌어요. 사장님이 급구로 사람을 구할 수 있어요.`
+        : "앞으로 잡힌 근무가 없어서 근무표는 그대로예요.";
+      kickSheet.showModal();
+    });
+
+    kickSheet.addEventListener("close", () => {
+      if (kickSheet.returnValue !== "yes") return;
+      members.splice(members.indexOf(current), 1);
+      render();
+      toast(current.upcoming
+        ? `${current.name}님을 내보냈어요. 근무 ${current.upcoming}개가 담당자 미정이 됐어요`
+        : `${current.name}님을 내보냈어요`);
+    });
+
+    render();
+  </script>
+</body>
+</html>

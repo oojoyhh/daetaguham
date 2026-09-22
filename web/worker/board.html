@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>요청 | 알바생</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .board-action { display:flex; align-items:center; justify-content:space-between; padding:13px 15px; border:1px solid var(--accent); border-radius:14px; color:var(--accent); font-size:13px; }
+    .board-action b { font-size:13px; }
+    .req { display: grid; gap: 13px; padding: 17px 18px; }
+    .req-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .req-lead { display:flex; align-items:baseline; gap:9px; min-width:0; }
+    .req-type { color:var(--accent); font-size:12px; font-weight:900; letter-spacing:.08em; }
+    .req-who { font-size:17px; font-weight:850; letter-spacing:-.02em; }
+    .req-store { color:var(--muted); font-size:12px; font-weight:700; }
+    .req-schedule { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:11px 0; border-top:1px solid var(--line-2); border-bottom:1px solid var(--line-2); }
+    .req-date { display:flex; align-items:baseline; gap:5px; }
+    .req-date strong { font-size:18px; line-height:1.15; }
+    .req-date span { color:var(--muted); font-size:12.5px; font-weight:700; }
+    .req-clock { color:var(--accent); font-size:21px; font-weight:850; line-height:1.1; letter-spacing:-.025em; white-space:nowrap; }
+    .req-footer { color:var(--muted); font-size:12.5px; text-align:right; }
+    .group-title { font-size: 13px; font-weight: 700; color: var(--muted); margin: 14px 4px 0; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <header class="topbar">
+      <h1>요청</h1>
+      <span class="account-meta"><b>한석휘</b><small>건대점</small></span>
+    </header>
+
+    <main class="content">
+      <div class="segmented" role="group" aria-label="보기">
+        <button type="button" data-view="open" aria-pressed="true">모집 중</button>
+        <button type="button" data-view="mine" aria-pressed="false">내 활동</button>
+      </div>
+      <a class="board-action" href="request-new.html"><span>내 근무에 대타나 교대가 필요하다면</span><b>+ 요청하기</b></a>
+
+      <!-- 모집 중 -->
+      <div id="openView" class="stack">
+        <div class="tabs" role="group" aria-label="유형">
+          <button type="button" data-filter="ALL" aria-pressed="true">전체</button>
+          <button type="button" data-filter="대타" aria-pressed="false">대타</button>
+          <button type="button" data-filter="교대" aria-pressed="false">교대</button>
+          <button type="button" data-filter="급구" aria-pressed="false">급구</button>
+        </div>
+        <div class="stack" id="openList"></div>
+        <p class="help" style="text-align:center">내 근무와 시간이 겹치는 요청은 보이지 않아요.</p>
+        <span class="api-tag">GET /requests?type</span>
+      </div>
+
+      <!-- 내 활동 -->
+      <div id="mineView" hidden>
+        <p class="group-title">내가 올린 요청</p>
+        <section class="card tight" style="margin-top:8px">
+          <a class="list-item" href="request.html">
+            <div class="grow"><p class="title num">대타 · 9/19(토) 14:00–22:00</p><p class="desc">지원자 3명이 기다리고 있어요</p></div>
+            <span class="pill open">모집 중</span><span class="chev" aria-hidden="true">›</span>
+          </a>
+          <a class="list-item" href="request.html?type=EXCHANGE">
+            <div class="grow"><p class="title num">교대 · 9/23(수) 14:00–22:00</p><p class="desc">대신 가능한 날 3일 · 지원자 3명</p></div>
+            <span class="pill open">모집 중</span><span class="chev" aria-hidden="true">›</span>
+          </a>
+        </section>
+
+        <p class="group-title">내가 지원한 요청</p>
+        <section class="card tight" style="margin-top:8px">
+          <a class="list-item" href="apply.html?id=r1&applied=1">
+            <div class="grow"><p class="title num">대타 · 9/21(월) 16:00–22:00</p><p class="desc">권예리님이 고르는 중이에요</p></div>
+            <span class="pill wait">선택 대기</span><span class="chev" aria-hidden="true">›</span>
+          </a>
+          <div class="list-item" style="cursor:default">
+            <div class="grow"><p class="title num">급구 · 9/6(일) 12:00–18:00</p><p class="desc">성수점 · 근무 완료</p></div>
+            <span class="pill ok">확정</span>
+          </div>
+        </section>
+
+        <p class="group-title">받은 제안</p>
+        <section class="card tight" style="margin-top:8px">
+          <a class="list-item" href="home.html">
+            <div class="grow"><p class="title num">교대 · 배민혁님</p><p class="desc">내 9/23(수) ⇄ 9/22(화)</p></div>
+            <span class="pill wait">답변 필요</span><span class="chev" aria-hidden="true">›</span>
+          </a>
+        </section>
+        <span class="api-tag" style="margin-top:10px">GET /me/requests?box=sent|applied|received</span>
+      </div>
+    </main>
+
+    <nav class="tabbar" data-role="worker" data-active="board"></nav>
+  </div>
+
+  <script src="../js/common.js"></script>
+  <script>
+    // 예시: 한석휘에게 보이는 모집 중 요청
+    const REQUESTS = [
+      { id: "g1", type: "급구", store: "A", date: "2026-09-29", start: "12:00", end: "20:00", who: "김효주 사장님", memo: "미들", note: "지원 1명" },
+      { id: "r1", type: "대타", store: "B", date: "2026-09-21", start: "16:00", end: "22:00", who: "권예리", memo: "마감", note: "지원 2명" },
+      { id: "r2", type: "교대", store: "B", date: "2026-09-24", start: "10:00", end: "16:00", who: "배민혁", memo: "오픈", note: "대신 일할 수 있는 날 5일 · 내 근무 3개와 맞아요" },
+      { id: "r3", type: "대타", store: "B", date: "2026-09-28", start: "12:00", end: "18:00", who: "인수연", memo: "미들", note: "건대점 전체 공개" },
+    ];
+    let filter = "ALL";
+
+    function renderOpen() {
+      const list = REQUESTS.filter((r) => filter === "ALL" || r.type === filter);
+      document.querySelectorAll("[data-filter]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.filter === filter)));
+      document.getElementById("openList").innerHTML = list.length ? list.map((r) => `
+        <a class="card req" href="apply.html?id=${r.id}">
+          <div class="req-head">
+            <div class="req-lead"><span class="req-type">${r.type}</span><b class="req-who">${r.who} 요청</b></div>
+            <span class="req-store">배스킨라빈스 · ${r.store === "A" ? "성수점" : "건대점"}</span>
+          </div>
+          <div class="req-schedule">
+            <div class="req-date"><strong class="num">${fmtDate(r.date)}</strong><span>· ${r.memo}</span></div>
+            <strong class="req-clock num">${r.start}–${r.end}</strong>
+          </div>
+          <p class="req-footer">${r.note}</p>
+        </a>`).join("") : `<div class="card empty">지금은 ${filter} 요청이 없어요</div>`;
+    }
+
+    function setView(v) {
+      document.querySelectorAll("[data-view]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === v)));
+      document.getElementById("openView").hidden = v !== "open";
+      document.getElementById("mineView").hidden = v !== "mine";
+    }
+
+    document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
+    document.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => { filter = b.dataset.filter; renderOpen(); }));
+
+    renderOpen();
+    setView(params.get("tab") === "mine" ? "mine" : "open");
+  </script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>매장 참여 | 대타구함</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .code-input { height: 64px; font-size: 26px; font-weight: 800; letter-spacing: .2em; text-align: center; text-transform: uppercase; font-family: var(--mono); }
+    .store-preview { display: flex; align-items: center; gap: 14px; }
+    .store-preview .ic { width: 48px; height: 48px; border-radius: 14px; background: var(--store-a-soft); color: var(--store-a); display: grid; place-items: center; font-weight: 800; }
+  </style>
+</head>
+<body>
+  <div class="phone no-tab">
+    <header class="topbar sub">
+      <a class="icon-btn" href="me.html" aria-label="뒤로"><span id="backIcon"></span></a>
+      <h1>매장 참여</h1>
+    </header>
+
+    <main class="content" id="step1">
+      <p class="help" style="padding:0 4px">사장님이나 점장님에게 받은 초대코드를 입력해 주세요.</p>
+      <input class="input code-input" id="code" maxlength="6" autocomplete="off" placeholder="ABC123" aria-label="초대코드">
+      <p class="error-text" id="codeError" hidden>없는 코드예요. 다시 확인해 주세요.</p>
+      <p class="help" style="text-align:center">시연용 코드: SEONG7 (성수점), GUNDA3 (건대점)</p>
+      <div class="bottom-bar">
+        <button class="btn btn-primary btn-block" type="button" id="nextBtn" disabled>확인</button>
+      </div>
+    </main>
+
+    <main class="content" id="step2" hidden>
+      <section class="card stack" style="gap:14px">
+        <div class="store-preview">
+          <span class="ic" id="storeIc"></span>
+          <div><b id="storeName" style="font-size:18px"></b><p class="muted" id="storeMeta"></p></div>
+        </div>
+        <p class="help">참여 신청을 보내면 사장님이나 점장님이 승인한 뒤부터 근무표를 볼 수 있어요.</p>
+      </section>
+      <div class="bottom-bar">
+        <button class="btn btn-primary btn-block" type="button" id="joinBtn">참여 신청 보내기</button>
+        <span class="api-tag" style="margin-top:6px">POST /stores/join</span>
+      </div>
+    </main>
+
+    <main class="content" id="step3" hidden>
+      <section class="card stack" style="gap:10px;margin-top:8px">
+        <span class="pill wait" style="width:fit-content">승인 대기</span>
+        <p style="font-size:20px;font-weight:800" id="doneTitle"></p>
+        <p class="muted">승인되면 알림으로 알려드려요.</p>
+      </section>
+      <a class="btn btn-block" href="me.html">내 정보로</a>
+    </main>
+  </div>
+
+  <script src="../js/common.js"></script>
+  <script>
+    document.getElementById("backIcon").outerHTML = BACK_ICON;
+
+    const STORES = {
+      SEONG7: { name: "성수점", meta: "아이스크림 · 서울 성동구 · 직원 8명", ic: "성" },
+      GUNDA3: { name: "건대점", meta: "아이스크림 · 서울 광진구 · 직원 6명", ic: "건" },
+    };
+    const input = document.getElementById("code");
+    let found = null;
+
+    input.addEventListener("input", () => {
+      input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      document.getElementById("codeError").hidden = true;
+      document.getElementById("nextBtn").disabled = input.value.length !== 6;
+    });
+
+    function show(step) {
+      ["step1", "step2", "step3"].forEach((id) => (document.getElementById(id).hidden = id !== step));
+    }
+
+    document.getElementById("nextBtn").addEventListener("click", () => {
+      found = STORES[input.value];
+      if (!found) { document.getElementById("codeError").hidden = false; return; }
+      document.getElementById("storeIc").textContent = found.ic;
+      document.getElementById("storeName").textContent = found.name;
+      document.getElementById("storeMeta").textContent = found.meta;
+      show("step2");
+    });
+
+    document.getElementById("joinBtn").addEventListener("click", () => {
+      document.getElementById("doneTitle").textContent = `${found.name}에 참여 신청을 보냈어요`;
+      show("step3");
+    });
+  </script>
+</body>
+</html>
