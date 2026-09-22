@@ -49,7 +49,7 @@ public class StoreMember {
 	@Column(nullable = false, length = 20)
 	private MemberStatus status;
 
-	@Column(nullable = false, updatable = false)
+	@Column(nullable = false)
 	private LocalDateTime requestedAt;
 
 	private LocalDateTime joinedAt;
@@ -68,6 +68,17 @@ public class StoreMember {
 
 	public static StoreMember request(Store store, User user) {
 		return new StoreMember(store, user);
+	}
+
+	public void reapply() {
+		if (status != MemberStatus.REJECTED && status != MemberStatus.LEFT) {
+			throw new IllegalStateException("참여를 다시 신청할 수 없는 상태입니다.");
+		}
+		role = MemberRole.WORKER;
+		status = MemberStatus.PENDING;
+		requestedAt = LocalDateTime.now();
+		joinedAt = null;
+		leftAt = null;
 	}
 
 	@PrePersist

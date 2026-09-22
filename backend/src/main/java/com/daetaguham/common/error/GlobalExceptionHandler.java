@@ -2,6 +2,9 @@ package com.daetaguham.common.error;
 
 import com.daetaguham.user.application.DuplicatePhoneException;
 import com.daetaguham.user.application.InvalidCredentialsException;
+import com.daetaguham.store.application.ExistingMembershipException;
+import com.daetaguham.store.application.OwnerCannotJoinException;
+import com.daetaguham.store.application.StoreNotFoundException;
 
 import jakarta.validation.ConstraintViolationException;
 
@@ -38,6 +41,21 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(InvalidCredentialsException.class)
 	ResponseEntity<ApiErrorResponse> handleInvalidCredentials(InvalidCredentialsException exception) {
 		return error(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", exception.getMessage());
+	}
+
+	@ExceptionHandler(StoreNotFoundException.class)
+	ResponseEntity<ApiErrorResponse> handleStoreNotFound(StoreNotFoundException exception) {
+		return error(HttpStatus.NOT_FOUND, "STORE_NOT_FOUND", exception.getMessage());
+	}
+
+	@ExceptionHandler(OwnerCannotJoinException.class)
+	ResponseEntity<ApiErrorResponse> handleOwnerCannotJoin(OwnerCannotJoinException exception) {
+		return error(HttpStatus.CONFLICT, "OWNER_CANNOT_JOIN", exception.getMessage());
+	}
+
+	@ExceptionHandler(ExistingMembershipException.class)
+	ResponseEntity<ApiErrorResponse> handleExistingMembership(ExistingMembershipException exception) {
+		return error(HttpStatus.CONFLICT, "MEMBERSHIP_ALREADY_EXISTS", exception.getMessage());
 	}
 
 	@ExceptionHandler(DataIntegrityViolationException.class)
