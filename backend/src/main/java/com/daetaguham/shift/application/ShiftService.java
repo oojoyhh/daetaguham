@@ -4,7 +4,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -119,6 +121,99 @@ public class ShiftService {
 	}
 
 	@Transactional
+	public BulkSaveResult saveBulk(
+			Long actorId,
+			Long storeId,
+			LocalDate from,
+			LocalDate to,
+			List<BulkItemCommand> commands
+	) {
+		Store store = findStore(storeId);
+		requireStoreManagement(actorId, store);
+		if (from.isAfter(to)) {
+			throw new InvalidShiftException("저장 시작일은 종료일보다 늦을 수 없어요.");
+		}
+
+		Map<String, ShiftTemplate> templates = new HashMap<>();
+		for (ShiftTemplate template : shiftTemplateRepository.findAllByStore_IdOrderByStartTimeAsc(storeId)) {
+			templates.put(template.getName(), template);
+		}
+
+		List<Shift> existing = shiftRepository
+				.findAllByStore_IdAndStartAtGreaterThanEqualAndStartAtLessThanOrderByStartAtAsc(
+						storeId,
+						from.atStartOfDay(),
+						to.plusDays(1).atStartOfDay()
+				);
+		Set<Long> replaceableIds = existing.stream().map(Shift::getId).collect(java.util.stream.Collectors.toSet());
+
+		List<PreparedShift> prepared = new ArrayList<>();
+		Map<Long, User> workers = new HashMap<>();
+		for (BulkItemCommand command : commands) {
+			if (command.date().isBefore(from) || command.date().isAfter(to)) {
+				throw new InvalidShiftException("근무 날짜는 저장 기간 안에 있어야 해요.");
+			}
+			String position = command.position().trim();
+			ShiftTemplate template = templates.get(position);
+			if (template == null) {
+				throw new InvalidShiftException("매장에 없는 시간대예요: " + position);
+			}
+			User worker = null;
+			if (command.workerId() != null) {
+				worker = workers.computeIfAbsent(
+						command.workerId(),
+						workerId -> findEligibleWorker(store, workerId)
+				);
+			}
+			prepared.add(new PreparedShift(
+					worker,
+					command.date().atTime(template.getStartTime()),
+					command.date().atTime(template.getEndTime()),
+					position
+			));
+		}
+
+		List<ShiftBulkConflictException.Conflict> conflicts = findBulkConflicts(
+				store, prepared, replaceableIds);
+		if (!conflicts.isEmpty()) {
+			throw new ShiftBulkConflictException(conflicts);
+		}
+
+		Map<ShiftKey, Deque<Shift>> existingByKey = new HashMap<>();
+		for (Shift shift : existing) {
+			existingByKey.computeIfAbsent(ShiftKey.from(shift), ignored -> new ArrayDeque<>()).add(shift);
+		}
+
+		User actor = userRepository.findById(actorId).orElseThrow(InvalidCredentialsException::new);
+		List<Shift> retained = new ArrayList<>();
+		List<Shift> toCreate = new ArrayList<>();
+		for (PreparedShift item : prepared) {
+			Deque<Shift> matches = existingByKey.get(ShiftKey.from(item));
+			Shift matched = matches == null ? null : matches.pollFirst();
+			if (matched != null) {
+				retained.add(matched);
+			} else {
+				toCreate.add(Shift.create(
+						store,
+						item.worker(),
+						item.startAt(),
+						item.endAt(),
+						item.position(),
+						actor
+				));
+			}
+		}
+
+		List<Shift> toDelete = existingByKey.values().stream().flatMap(Deque::stream).toList();
+		shiftRepository.deleteAll(toDelete);
+		List<Shift> created = shiftRepository.saveAll(toCreate);
+		List<Long> emptyShiftIds = new ArrayList<>();
+		retained.stream().filter(shift -> shift.getWorker() == null).map(Shift::getId).forEach(emptyShiftIds::add);
+		created.stream().filter(shift -> shift.getWorker() == null).map(Shift::getId).forEach(emptyShiftIds::add);
+		return new BulkSaveResult(created.size(), toDelete.size(), emptyShiftIds);
+	}
+
+	@Transactional
 	public ManagedShift createShift(
 			Long actorId,
 			Long storeId,
@@ -204,6 +299,15 @@ public class ShiftService {
 		if (workerId == null) {
 			return null;
 		}
+		User worker = findEligibleWorker(store, workerId);
+		long ignoredShiftId = excludeShiftId == null ? -1L : excludeShiftId;
+		if (shiftRepository.existsOverlappingShift(workerId, startAt, endAt, ignoredShiftId)) {
+			throw new ShiftTimeConflictException();
+		}
+		return worker;
+	}
+
+	private User findEligibleWorker(Store store, Long workerId) {
 		if (storeRepository.existsByOwner_Id(workerId)) {
 			throw new InvalidShiftWorkerException();
 		}
@@ -215,12 +319,66 @@ public class ShiftService {
 		if (!eligible) {
 			throw new InvalidShiftWorkerException();
 		}
-		User worker = userRepository.findById(workerId).orElseThrow(InvalidShiftWorkerException::new);
-		long ignoredShiftId = excludeShiftId == null ? -1L : excludeShiftId;
-		if (shiftRepository.existsOverlappingShift(workerId, startAt, endAt, ignoredShiftId)) {
-			throw new ShiftTimeConflictException();
+		return userRepository.findById(workerId).orElseThrow(InvalidShiftWorkerException::new);
+	}
+
+	private List<ShiftBulkConflictException.Conflict> findBulkConflicts(
+			Store store,
+			List<PreparedShift> prepared,
+			Set<Long> replaceableIds
+	) {
+		List<ShiftBulkConflictException.Conflict> conflicts = new ArrayList<>();
+		Map<Long, List<PreparedShift>> byWorker = new HashMap<>();
+		for (PreparedShift item : prepared) {
+			if (item.worker() != null) {
+				byWorker.computeIfAbsent(item.worker().getId(), ignored -> new ArrayList<>()).add(item);
+			}
 		}
-		return worker;
+
+		for (List<PreparedShift> workerShifts : byWorker.values()) {
+			workerShifts.sort(Comparator.comparing(PreparedShift::startAt));
+			for (int index = 1; index < workerShifts.size(); index++) {
+				PreparedShift previous = workerShifts.get(index - 1);
+				PreparedShift current = workerShifts.get(index);
+				if (current.startAt().isBefore(previous.endAt())) {
+					conflicts.add(toConflict(current, store.getName(), current.startAt(), current.endAt()));
+				}
+			}
+		}
+
+		for (PreparedShift item : prepared) {
+			if (item.worker() == null) {
+				continue;
+			}
+			for (Shift overlap : shiftRepository.findOverlappingShifts(
+					item.worker().getId(), item.startAt(), item.endAt())) {
+				if (!replaceableIds.contains(overlap.getId())) {
+					conflicts.add(toConflict(
+							item,
+							overlap.getStore().getName(),
+							overlap.getStartAt(),
+							overlap.getEndAt()
+					));
+				}
+			}
+		}
+		return conflicts;
+	}
+
+	private ShiftBulkConflictException.Conflict toConflict(
+			PreparedShift item,
+			String storeName,
+			LocalDateTime startAt,
+			LocalDateTime endAt
+	) {
+		return new ShiftBulkConflictException.Conflict(
+				item.worker().getId(),
+				item.worker().getName(),
+				item.startAt().toLocalDate(),
+				storeName,
+				startAt,
+				endAt
+		);
 	}
 
 	private void validateShift(LocalDateTime startAt, LocalDateTime endAt, String position) {
@@ -274,5 +432,44 @@ public class ShiftService {
 	}
 
 	public record ManagedShift(Shift shift, boolean helper) {
+	}
+
+	public record BulkItemCommand(Long workerId, LocalDate date, String position) {
+	}
+
+	public record BulkSaveResult(int created, int deleted, List<Long> emptyShiftIds) {
+	}
+
+	private record PreparedShift(
+			User worker,
+			LocalDateTime startAt,
+			LocalDateTime endAt,
+			String position
+	) {
+	}
+
+	private record ShiftKey(
+			Long workerId,
+			LocalDateTime startAt,
+			LocalDateTime endAt,
+			String position
+	) {
+		private static ShiftKey from(Shift shift) {
+			return new ShiftKey(
+					shift.getWorker() == null ? null : shift.getWorker().getId(),
+					shift.getStartAt(),
+					shift.getEndAt(),
+					shift.getPosition()
+			);
+		}
+
+		private static ShiftKey from(PreparedShift shift) {
+			return new ShiftKey(
+					shift.worker() == null ? null : shift.worker().getId(),
+					shift.startAt(),
+					shift.endAt(),
+					shift.position()
+			);
+		}
 	}
 }

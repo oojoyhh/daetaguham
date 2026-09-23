@@ -8,6 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.daetaguham.common.security.JwtTokenService;
+import com.daetaguham.shift.domain.Shift;
+import com.daetaguham.shift.domain.ShiftRepository;
 import com.daetaguham.shift.domain.ShiftTemplate;
 import com.daetaguham.shift.domain.ShiftTemplateRepository;
 import com.daetaguham.store.domain.MemberRole;
@@ -20,6 +22,7 @@ import com.daetaguham.user.domain.User;
 import com.daetaguham.user.domain.UserRepository;
 
 import java.time.LocalTime;
+import java.time.LocalDateTime;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,6 +61,9 @@ class ShiftApiIntegrationTest {
 	private ShiftTemplateRepository shiftTemplateRepository;
 
 	@Autowired
+	private ShiftRepository shiftRepository;
+
+	@Autowired
 	private PasswordEncoder passwordEncoder;
 
 	@Autowired
@@ -68,6 +74,7 @@ class ShiftApiIntegrationTest {
 	private User worker;
 	private User helper;
 	private Store store;
+	private Store otherStore;
 
 	@BeforeEach
 	void setUp() {
@@ -76,12 +83,14 @@ class ShiftApiIntegrationTest {
 		worker = saveUser("010-3333-3000", "김민");
 		helper = saveUser("010-4444-4000", "박민서");
 		store = storeRepository.save(Store.create(owner, "성수점", "디저트", null, "SEONG7"));
-		Store otherStore = storeRepository.save(Store.create(owner, "건대점", "디저트", null, "KONKUK"));
+		otherStore = storeRepository.save(Store.create(owner, "건대점", "디저트", null, "KONKUK"));
 		activateManager(store, manager);
 		activate(store, worker);
 		activate(otherStore, helper);
 		shiftTemplateRepository.save(ShiftTemplate.create(
 				store, "마감", LocalTime.of(16, 0), LocalTime.of(22, 0), 1));
+		shiftTemplateRepository.save(ShiftTemplate.create(
+				store, "미들", LocalTime.of(12, 0), LocalTime.of(18, 0), 1));
 	}
 
 	@Test
@@ -178,6 +187,104 @@ class ShiftApiIntegrationTest {
 						}
 						"""))
 				.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void bulkSavePreservesIdenticalRowsAndSupportsFullReset() throws Exception {
+		String body = """
+				{
+				  "from": "2026-10-01",
+				  "to": "2026-10-31",
+				  "shifts": [
+				    {"workerId": %d, "date": "2026-10-10", "position": "마감"},
+				    {"workerId": null, "date": "2026-10-11", "position": "마감"}
+				  ]
+				}
+				""".formatted(worker.getId());
+
+		mockMvc.perform(post("/stores/{storeId}/shifts/bulk", store.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(manager))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(body))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.created").value(2))
+				.andExpect(jsonPath("$.deleted").value(0))
+				.andExpect(jsonPath("$.emptyShiftIds.length()").value(1));
+
+		mockMvc.perform(post("/stores/{storeId}/shifts/bulk", store.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(manager))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(body))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.created").value(0))
+				.andExpect(jsonPath("$.deleted").value(0));
+
+		mockMvc.perform(post("/stores/{storeId}/shifts/bulk", store.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(manager))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{
+						  "from": "2026-10-01",
+						  "to": "2026-10-31",
+						  "shifts": []
+						}
+						"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.created").value(0))
+				.andExpect(jsonPath("$.deleted").value(2))
+				.andExpect(jsonPath("$.emptyShiftIds.length()").value(0));
+	}
+
+	@Test
+	void bulkSaveRejectsInternalAndOtherStoreConflictsWithoutPartialChanges() throws Exception {
+		mockMvc.perform(post("/stores/{storeId}/shifts/bulk", store.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{
+						  "from": "2026-10-01",
+						  "to": "2026-10-31",
+						  "shifts": [
+						    {"workerId": %d, "date": "2026-10-12", "position": "미들"},
+						    {"workerId": %d, "date": "2026-10-12", "position": "마감"}
+						  ]
+						}
+						""".formatted(worker.getId(), worker.getId())))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("TIME_CONFLICT"))
+				.andExpect(jsonPath("$.conflicts[0].storeName").value("성수점"));
+
+		shiftRepository.save(Shift.create(
+				otherStore,
+				worker,
+				LocalDateTime.parse("2026-10-13T16:00:00"),
+				LocalDateTime.parse("2026-10-13T22:00:00"),
+				"마감",
+				owner
+		));
+
+		mockMvc.perform(post("/stores/{storeId}/shifts/bulk", store.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{
+						  "from": "2026-10-01",
+						  "to": "2026-10-31",
+						  "shifts": [
+						    {"workerId": %d, "date": "2026-10-13", "position": "마감"}
+						  ]
+						}
+						""".formatted(worker.getId())))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("TIME_CONFLICT"))
+				.andExpect(jsonPath("$.conflicts[0].storeName").value("건대점"));
+
+		mockMvc.perform(get("/stores/{storeId}/shifts", store.getId())
+				.param("from", "2026-10-01")
+				.param("to", "2026-10-31")
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(0));
 	}
 
 	private org.springframework.test.web.servlet.ResultActions createShift(

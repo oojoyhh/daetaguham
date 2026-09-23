@@ -82,6 +82,21 @@ public class ShiftController {
 		));
 	}
 
+	@PostMapping("/stores/{storeId}/shifts/bulk")
+	public ShiftBulkResultResponse saveBulk(
+			@AuthenticationPrincipal Jwt jwt,
+			@PathVariable Long storeId,
+			@Valid @RequestBody ShiftBulkRequest request
+	) {
+		return ShiftBulkResultResponse.from(shiftService.saveBulk(
+				Long.valueOf(jwt.getSubject()),
+				storeId,
+				request.from(),
+				request.to(),
+				request.shifts().stream().map(ShiftBulkItem::toCommand).toList()
+		));
+	}
+
 	@PutMapping("/shifts/{shiftId}")
 	public ShiftResponse updateShift(
 			@AuthenticationPrincipal Jwt jwt,

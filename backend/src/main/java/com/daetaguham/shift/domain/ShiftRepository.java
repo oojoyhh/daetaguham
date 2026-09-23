@@ -31,4 +31,18 @@ public interface ShiftRepository extends JpaRepository<Shift, Long> {
 			@Param("endAt") LocalDateTime endAt,
 			@Param("excludeId") Long excludeId
 	);
+
+	@EntityGraph(attributePaths = {"store", "worker"})
+	@Query("""
+			select shift
+			from Shift shift
+			where shift.worker.id = :workerId
+			  and shift.startAt < :endAt
+			  and shift.endAt > :startAt
+			""")
+	List<Shift> findOverlappingShifts(
+			@Param("workerId") Long workerId,
+			@Param("startAt") LocalDateTime startAt,
+			@Param("endAt") LocalDateTime endAt
+	);
 }

@@ -2,8 +2,10 @@ package com.daetaguham.common.error;
 
 import com.daetaguham.shift.application.InvalidShiftException;
 import com.daetaguham.shift.application.InvalidShiftWorkerException;
+import com.daetaguham.shift.application.ShiftBulkConflictException;
 import com.daetaguham.shift.application.ShiftNotFoundException;
 import com.daetaguham.shift.application.ShiftTimeConflictException;
+import com.daetaguham.shift.api.ShiftBulkConflictResponse;
 import com.daetaguham.user.application.DuplicatePhoneException;
 import com.daetaguham.user.application.InvalidCredentialsException;
 import com.daetaguham.store.application.ExistingMembershipException;
@@ -105,6 +107,11 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(ShiftTimeConflictException.class)
 	ResponseEntity<ApiErrorResponse> handleShiftTimeConflict(ShiftTimeConflictException exception) {
 		return error(HttpStatus.CONFLICT, "TIME_CONFLICT", exception.getMessage());
+	}
+
+	@ExceptionHandler(ShiftBulkConflictException.class)
+	ResponseEntity<ShiftBulkConflictResponse> handleShiftBulkConflict(ShiftBulkConflictException exception) {
+		return ResponseEntity.status(HttpStatus.CONFLICT).body(ShiftBulkConflictResponse.from(exception));
 	}
 
 	@ExceptionHandler(ShiftNotFoundException.class)
