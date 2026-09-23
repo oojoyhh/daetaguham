@@ -9,7 +9,14 @@ import org.springframework.data.jpa.repository.EntityGraph;
 
 public interface StoreMemberRepository extends JpaRepository<StoreMember, Long> {
 
+	@EntityGraph(attributePaths = {"store", "user"})
 	Optional<StoreMember> findByStore_IdAndUser_Id(Long storeId, Long userId);
+
+	@EntityGraph(attributePaths = "user")
+	List<StoreMember> findAllByStore_IdOrderByRequestedAtAsc(Long storeId);
+
+	@EntityGraph(attributePaths = "user")
+	List<StoreMember> findAllByStore_IdAndStatusOrderByRequestedAtAsc(Long storeId, MemberStatus status);
 
 	List<StoreMember> findAllByUser_IdAndStatus(Long userId, MemberStatus status);
 

@@ -81,6 +81,25 @@ public class StoreMember {
 		leftAt = null;
 	}
 
+	public void decide(MemberStatus decision) {
+		if (status != MemberStatus.PENDING) {
+			throw new IllegalStateException("대기 중인 참여 신청만 처리할 수 있습니다.");
+		}
+		if (decision != MemberStatus.ACTIVE && decision != MemberStatus.REJECTED) {
+			throw new IllegalArgumentException("승인 또는 거절만 선택할 수 있습니다.");
+		}
+		status = decision;
+		joinedAt = decision == MemberStatus.ACTIVE ? LocalDateTime.now() : null;
+		leftAt = null;
+	}
+
+	public void changeRole(MemberRole newRole) {
+		if (status != MemberStatus.ACTIVE) {
+			throw new IllegalStateException("승인된 직원의 역할만 변경할 수 있습니다.");
+		}
+		role = Objects.requireNonNull(newRole);
+	}
+
 	@PrePersist
 	void assignRequestedAt() {
 		if (requestedAt == null) {

@@ -51,7 +51,8 @@ public class StoreService {
 	@Transactional
 	public StoreMember join(Long userId, String inviteCode) {
 		User user = userRepository.findById(userId).orElseThrow(InvalidCredentialsException::new);
-		Store store = storeRepository.findByInviteCode(inviteCode).orElseThrow(StoreNotFoundException::new);
+		Store store = storeRepository.findByInviteCode(inviteCode)
+				.orElseThrow(() -> new StoreNotFoundException("해당 초대코드의 매장을 찾을 수 없어요."));
 		if (store.getOwner().getId().equals(userId)) {
 			throw new OwnerCannotJoinException();
 		}
