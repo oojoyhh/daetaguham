@@ -28,4 +28,6 @@ public interface StoreMemberRepository extends JpaRepository<StoreMember, Long> 
 	boolean existsByStore_IdAndUser_IdAndStatus(Long storeId, Long userId, MemberStatus status);
 
 	boolean existsByUser_IdAndStatusAndStore_Owner_Id(Long userId, MemberStatus status, Long ownerId);
+
+	long countByStore_IdAndStatus(Long storeId, MemberStatus status);
 }

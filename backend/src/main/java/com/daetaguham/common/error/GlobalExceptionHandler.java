@@ -12,9 +12,11 @@ import com.daetaguham.user.application.InvalidCredentialsException;
 import com.daetaguham.store.application.ExistingMembershipException;
 import com.daetaguham.store.application.OwnerCannotJoinException;
 import com.daetaguham.store.application.InvalidMemberStateException;
+import com.daetaguham.store.application.InvalidStoreNoticeException;
 import com.daetaguham.store.application.OwnerPermissionRequiredException;
 import com.daetaguham.store.application.StoreManagementForbiddenException;
 import com.daetaguham.store.application.StoreMemberNotFoundException;
+import com.daetaguham.store.application.StoreNoticeNotFoundException;
 import com.daetaguham.store.application.StoreNotFoundException;
 
 import jakarta.validation.ConstraintViolationException;
@@ -98,6 +100,16 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(InvalidMemberStateException.class)
 	ResponseEntity<ApiErrorResponse> handleInvalidMemberState(InvalidMemberStateException exception) {
 		return error(HttpStatus.CONFLICT, "INVALID_MEMBER_STATE", exception.getMessage());
+	}
+
+	@ExceptionHandler(InvalidStoreNoticeException.class)
+	ResponseEntity<ApiErrorResponse> handleInvalidStoreNotice(InvalidStoreNoticeException exception) {
+		return error(HttpStatus.BAD_REQUEST, "INVALID_STORE_NOTICE", exception.getMessage());
+	}
+
+	@ExceptionHandler(StoreNoticeNotFoundException.class)
+	ResponseEntity<ApiErrorResponse> handleStoreNoticeNotFound(StoreNoticeNotFoundException exception) {
+		return error(HttpStatus.NOT_FOUND, "NOTICE_NOT_FOUND", exception.getMessage());
 	}
 
 	@ExceptionHandler(InvalidShiftException.class)

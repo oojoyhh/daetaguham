@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.util.List;
 
 import com.daetaguham.shift.application.ShiftService;
+import com.daetaguham.store.api.StoreNoticeResponse;
+import com.daetaguham.store.application.StoreNoticeService;
 import com.daetaguham.user.application.AvailabilityService;
 import com.daetaguham.user.application.UserAccountService;
 
@@ -26,15 +28,18 @@ public class MeController {
 	private final UserAccountService userAccountService;
 	private final ShiftService shiftService;
 	private final AvailabilityService availabilityService;
+	private final StoreNoticeService storeNoticeService;
 
 	public MeController(
 			UserAccountService userAccountService,
 			ShiftService shiftService,
-			AvailabilityService availabilityService
+			AvailabilityService availabilityService,
+			StoreNoticeService storeNoticeService
 	) {
 		this.userAccountService = userAccountService;
 		this.shiftService = shiftService;
 		this.availabilityService = availabilityService;
+		this.storeNoticeService = storeNoticeService;
 	}
 
 	@GetMapping
@@ -70,5 +75,12 @@ public class MeController {
 				Long.valueOf(jwt.getSubject()),
 				request.items().stream().map(AvailabilityItem::toCommand).toList()
 		).stream().map(AvailabilityItem::from).toList();
+	}
+
+	@GetMapping("/store-notices")
+	public List<StoreNoticeResponse> storeNotices(@AuthenticationPrincipal Jwt jwt) {
+		return storeNoticeService.findMine(Long.valueOf(jwt.getSubject())).stream()
+				.map(StoreNoticeResponse::from)
+				.toList();
 	}
 }

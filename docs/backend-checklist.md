@@ -1,7 +1,7 @@
 # 백엔드 개발 체크리스트
 
 > 최종 갱신: 2026-09-23  
-> 현재 DB 구현: 12개 테이블 중 6개 (`users`, `stores`, `store_members`, `shift_templates`, `shifts`, `availabilities`)
+> 현재 DB 구현: 12개 테이블 중 7개 (`users`, `stores`, `store_members`, `shift_templates`, `shifts`, `availabilities`, `store_notices`)
 
 ## 1. 프로젝트 기반
 
@@ -44,8 +44,9 @@
 ## 5. 근무 가능 시간·전달사항
 
 - [x] `availabilities` 테이블과 요일별 가능 시간 API
-- [ ] `store_notices` 테이블과 매장 전달사항 API
-- [ ] 오늘 현황·직원 화면용 조회 조합
+- [x] `store_notices` 테이블과 매장 전달사항 API
+- [x] 오늘 근무자·참여 대기·주간 빈 근무 현황
+- [ ] 요청 모델 연결 후 승인 대기·모집 중 급구 수 반영
 
 ## 6. 대타·교대·급구 요청
 
@@ -83,9 +84,8 @@
 
 ## 다음 작업 순서
 
-1. 매장 전달사항과 오늘 현황
-2. 대타·교대·급구 요청 통합 모델
-3. 지원·승인·근무표 반영
-4. 알림·추천
-5. HTML 화면 API 연결
-6. 통합 테스트·배포
+1. 대타·교대·급구 요청 통합 모델
+2. 지원·승인·근무표 반영
+3. 알림·추천
+4. HTML 화면 API 연결
+5. 통합 테스트·배포
