@@ -120,6 +120,27 @@ public class ShiftService {
 				.toList();
 	}
 
+	@Transactional(readOnly = true)
+	public List<MyShift> findMyShifts(Long userId, LocalDate from, LocalDate to) {
+		if (from.isAfter(to)) {
+			throw new InvalidShiftException("조회 시작일은 종료일보다 늦을 수 없어요.");
+		}
+		LocalDateTime now = LocalDateTime.now();
+		return shiftRepository
+				.findAllByWorker_IdAndStartAtGreaterThanEqualAndStartAtLessThanOrderByStartAtAsc(
+						userId,
+						from.atStartOfDay(),
+						to.plusDays(1).atStartOfDay()
+				)
+				.stream()
+				.map(shift -> new MyShift(
+						shift,
+						toManagedShift(shift).helper(),
+						progressOf(shift, now)
+				))
+				.toList();
+	}
+
 	@Transactional
 	public BulkSaveResult saveBulk(
 			Long actorId,
@@ -423,6 +444,16 @@ public class ShiftService {
 		return StringUtils.hasText(position) ? position.trim() : null;
 	}
 
+	private ShiftProgress progressOf(Shift shift, LocalDateTime now) {
+		if (now.isBefore(shift.getStartAt())) {
+			return ShiftProgress.UPCOMING;
+		}
+		if (now.isBefore(shift.getEndAt())) {
+			return ShiftProgress.IN_PROGRESS;
+		}
+		return ShiftProgress.DONE;
+	}
+
 	public record TemplateCommand(
 			String name,
 			LocalTime startTime,
@@ -432,6 +463,9 @@ public class ShiftService {
 	}
 
 	public record ManagedShift(Shift shift, boolean helper) {
+	}
+
+	public record MyShift(Shift shift, boolean helper, ShiftProgress status) {
 	}
 
 	public record BulkItemCommand(Long workerId, LocalDate date, String position) {

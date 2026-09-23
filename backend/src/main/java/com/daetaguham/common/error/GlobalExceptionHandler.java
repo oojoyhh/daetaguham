@@ -7,6 +7,7 @@ import com.daetaguham.shift.application.ShiftNotFoundException;
 import com.daetaguham.shift.application.ShiftTimeConflictException;
 import com.daetaguham.shift.api.ShiftBulkConflictResponse;
 import com.daetaguham.user.application.DuplicatePhoneException;
+import com.daetaguham.user.application.InvalidAvailabilityException;
 import com.daetaguham.user.application.InvalidCredentialsException;
 import com.daetaguham.store.application.ExistingMembershipException;
 import com.daetaguham.store.application.OwnerCannotJoinException;
@@ -57,6 +58,11 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(InvalidCredentialsException.class)
 	ResponseEntity<ApiErrorResponse> handleInvalidCredentials(InvalidCredentialsException exception) {
 		return error(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", exception.getMessage());
+	}
+
+	@ExceptionHandler(InvalidAvailabilityException.class)
+	ResponseEntity<ApiErrorResponse> handleInvalidAvailability(InvalidAvailabilityException exception) {
+		return error(HttpStatus.BAD_REQUEST, "INVALID_AVAILABILITY", exception.getMessage());
 	}
 
 	@ExceptionHandler(StoreNotFoundException.class)

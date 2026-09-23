@@ -17,6 +17,13 @@ public interface ShiftRepository extends JpaRepository<Shift, Long> {
 			LocalDateTime toExclusive
 	);
 
+	@EntityGraph(attributePaths = {"store", "worker"})
+	List<Shift> findAllByWorker_IdAndStartAtGreaterThanEqualAndStartAtLessThanOrderByStartAtAsc(
+			Long workerId,
+			LocalDateTime from,
+			LocalDateTime toExclusive
+	);
+
 	@Query("""
 			select (count(shift) > 0)
 			from Shift shift
