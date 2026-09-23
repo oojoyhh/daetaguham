@@ -1,5 +1,9 @@
 package com.daetaguham.common.error;
 
+import com.daetaguham.shift.application.InvalidShiftException;
+import com.daetaguham.shift.application.InvalidShiftWorkerException;
+import com.daetaguham.shift.application.ShiftNotFoundException;
+import com.daetaguham.shift.application.ShiftTimeConflictException;
 import com.daetaguham.user.application.DuplicatePhoneException;
 import com.daetaguham.user.application.InvalidCredentialsException;
 import com.daetaguham.store.application.ExistingMembershipException;
@@ -86,6 +90,26 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(InvalidMemberStateException.class)
 	ResponseEntity<ApiErrorResponse> handleInvalidMemberState(InvalidMemberStateException exception) {
 		return error(HttpStatus.CONFLICT, "INVALID_MEMBER_STATE", exception.getMessage());
+	}
+
+	@ExceptionHandler(InvalidShiftException.class)
+	ResponseEntity<ApiErrorResponse> handleInvalidShift(InvalidShiftException exception) {
+		return error(HttpStatus.BAD_REQUEST, "INVALID_SHIFT", exception.getMessage());
+	}
+
+	@ExceptionHandler(InvalidShiftWorkerException.class)
+	ResponseEntity<ApiErrorResponse> handleInvalidShiftWorker(InvalidShiftWorkerException exception) {
+		return error(HttpStatus.CONFLICT, "WORKER_NOT_ELIGIBLE", exception.getMessage());
+	}
+
+	@ExceptionHandler(ShiftTimeConflictException.class)
+	ResponseEntity<ApiErrorResponse> handleShiftTimeConflict(ShiftTimeConflictException exception) {
+		return error(HttpStatus.CONFLICT, "TIME_CONFLICT", exception.getMessage());
+	}
+
+	@ExceptionHandler(ShiftNotFoundException.class)
+	ResponseEntity<ApiErrorResponse> handleShiftNotFound(ShiftNotFoundException exception) {
+		return error(HttpStatus.NOT_FOUND, "SHIFT_NOT_FOUND", exception.getMessage());
 	}
 
 	@ExceptionHandler(DataIntegrityViolationException.class)

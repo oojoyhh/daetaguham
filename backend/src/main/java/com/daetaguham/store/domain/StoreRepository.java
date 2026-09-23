@@ -11,5 +11,7 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
 
 	List<Store> findAllByOwner_Id(Long ownerId);
 
+	boolean existsByOwner_Id(Long ownerId);
+
 	boolean existsByInviteCode(String inviteCode);
 }

@@ -1,11 +1,13 @@
 package com.daetaguham.store.api;
 
 import static org.hamcrest.Matchers.matchesPattern;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.daetaguham.common.security.JwtTokenService;
+import com.daetaguham.shift.domain.ShiftTemplateRepository;
 import com.daetaguham.store.domain.Store;
 import com.daetaguham.store.domain.StoreRepository;
 import com.daetaguham.user.domain.User;
@@ -40,6 +42,9 @@ class StoreApiIntegrationTest {
 	private StoreRepository storeRepository;
 
 	@Autowired
+	private ShiftTemplateRepository shiftTemplateRepository;
+
+	@Autowired
 	private PasswordEncoder passwordEncoder;
 
 	@Autowired
@@ -64,6 +69,11 @@ class StoreApiIntegrationTest {
 				.andExpect(jsonPath("$.ownerName").value("김효주"))
 				.andExpect(jsonPath("$.inviteCode", matchesPattern("^[A-Z0-9]{6}$")))
 				.andExpect(jsonPath("$.approvalRequired").value(true));
+
+		Store createdStore = storeRepository.findAllByOwner_Id(owner.getId()).getFirst();
+		assertThat(shiftTemplateRepository.findAllByStore_IdOrderByStartTimeAsc(createdStore.getId()))
+				.extracting("name")
+				.containsExactly("오픈", "미들", "마감");
 	}
 
 	@Test

@@ -1,5 +1,10 @@
 package com.daetaguham.store.application;
 
+import java.time.LocalTime;
+import java.util.List;
+
+import com.daetaguham.shift.domain.ShiftTemplate;
+import com.daetaguham.shift.domain.ShiftTemplateRepository;
 import com.daetaguham.store.domain.MemberStatus;
 import com.daetaguham.store.domain.Store;
 import com.daetaguham.store.domain.StoreMember;
@@ -21,17 +26,20 @@ public class StoreService {
 	private final UserRepository userRepository;
 	private final StoreRepository storeRepository;
 	private final StoreMemberRepository storeMemberRepository;
+	private final ShiftTemplateRepository shiftTemplateRepository;
 	private final InviteCodeGenerator inviteCodeGenerator;
 
 	public StoreService(
 			UserRepository userRepository,
 			StoreRepository storeRepository,
 			StoreMemberRepository storeMemberRepository,
+			ShiftTemplateRepository shiftTemplateRepository,
 			InviteCodeGenerator inviteCodeGenerator
 	) {
 		this.userRepository = userRepository;
 		this.storeRepository = storeRepository;
 		this.storeMemberRepository = storeMemberRepository;
+		this.shiftTemplateRepository = shiftTemplateRepository;
 		this.inviteCodeGenerator = inviteCodeGenerator;
 	}
 
@@ -45,7 +53,13 @@ public class StoreService {
 				normalizeAddress(address),
 				createUniqueInviteCode()
 		);
-		return storeRepository.save(store);
+		Store savedStore = storeRepository.save(store);
+		shiftTemplateRepository.saveAll(List.of(
+				ShiftTemplate.create(savedStore, "오픈", LocalTime.of(10, 0), LocalTime.of(16, 0), 1),
+				ShiftTemplate.create(savedStore, "미들", LocalTime.of(12, 0), LocalTime.of(18, 0), 1),
+				ShiftTemplate.create(savedStore, "마감", LocalTime.of(16, 0), LocalTime.of(22, 0), 1)
+		));
+		return savedStore;
 	}
 
 	@Transactional
