@@ -17,6 +17,7 @@ import com.daetaguham.shift.domain.Shift;
 import com.daetaguham.shift.domain.ShiftRepository;
 import com.daetaguham.shift.domain.ShiftTemplate;
 import com.daetaguham.shift.domain.ShiftTemplateRepository;
+import com.daetaguham.request.domain.ShiftRequestRepository;
 import com.daetaguham.store.application.StoreManagementForbiddenException;
 import com.daetaguham.store.application.StoreNotFoundException;
 import com.daetaguham.store.domain.MemberRole;
@@ -40,19 +41,22 @@ public class ShiftService {
 	private final UserRepository userRepository;
 	private final ShiftTemplateRepository shiftTemplateRepository;
 	private final ShiftRepository shiftRepository;
+	private final ShiftRequestRepository shiftRequestRepository;
 
 	public ShiftService(
 			StoreRepository storeRepository,
 			StoreMemberRepository storeMemberRepository,
 			UserRepository userRepository,
 			ShiftTemplateRepository shiftTemplateRepository,
-			ShiftRepository shiftRepository
+			ShiftRepository shiftRepository,
+			ShiftRequestRepository shiftRequestRepository
 	) {
 		this.storeRepository = storeRepository;
 		this.storeMemberRepository = storeMemberRepository;
 		this.userRepository = userRepository;
 		this.shiftTemplateRepository = shiftTemplateRepository;
 		this.shiftRepository = shiftRepository;
+		this.shiftRequestRepository = shiftRequestRepository;
 	}
 
 	@Transactional(readOnly = true)
@@ -226,6 +230,9 @@ public class ShiftService {
 		}
 
 		List<Shift> toDelete = existingByKey.values().stream().flatMap(Deque::stream).toList();
+		if (toDelete.stream().anyMatch(shift -> shiftRequestRepository.existsByShift_Id(shift.getId()))) {
+			throw new ShiftReferencedByRequestException();
+		}
 		shiftRepository.deleteAll(toDelete);
 		List<Shift> created = shiftRepository.saveAll(toCreate);
 		List<Long> emptyShiftIds = new ArrayList<>();
@@ -270,6 +277,7 @@ public class ShiftService {
 	) {
 		Shift shift = shiftRepository.findById(shiftId).orElseThrow(ShiftNotFoundException::new);
 		requireStoreManagement(actorId, shift.getStore());
+		requireNoRequestReference(shiftId);
 		validateShift(startAt, endAt, position);
 		User worker = validateAndFindWorker(shift.getStore(), workerId, startAt, endAt, shiftId);
 		shift.update(worker, startAt, endAt, normalizePosition(position));
@@ -280,7 +288,14 @@ public class ShiftService {
 	public void deleteShift(Long actorId, Long shiftId) {
 		Shift shift = shiftRepository.findById(shiftId).orElseThrow(ShiftNotFoundException::new);
 		requireStoreManagement(actorId, shift.getStore());
+		requireNoRequestReference(shiftId);
 		shiftRepository.delete(shift);
+	}
+
+	private void requireNoRequestReference(Long shiftId) {
+		if (shiftRequestRepository.existsByShift_Id(shiftId)) {
+			throw new ShiftReferencedByRequestException();
+		}
 	}
 
 	private Store findStore(Long storeId) {

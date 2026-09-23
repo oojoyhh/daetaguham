@@ -7,6 +7,9 @@ import java.util.List;
 
 import com.daetaguham.shift.application.ShiftService;
 import com.daetaguham.shift.application.ShiftService.ManagedShift;
+import com.daetaguham.request.domain.RequestStatus;
+import com.daetaguham.request.domain.RequestType;
+import com.daetaguham.request.domain.ShiftRequestRepository;
 import com.daetaguham.store.domain.MemberRole;
 import com.daetaguham.store.domain.MemberStatus;
 import com.daetaguham.store.domain.Store;
@@ -22,15 +25,18 @@ public class StoreOverviewService {
 	private final StoreRepository storeRepository;
 	private final StoreMemberRepository storeMemberRepository;
 	private final ShiftService shiftService;
+	private final ShiftRequestRepository shiftRequestRepository;
 
 	public StoreOverviewService(
 			StoreRepository storeRepository,
 			StoreMemberRepository storeMemberRepository,
-			ShiftService shiftService
+			ShiftService shiftService,
+			ShiftRequestRepository shiftRequestRepository
 	) {
 		this.storeRepository = storeRepository;
 		this.storeMemberRepository = storeMemberRepository;
 		this.shiftService = shiftService;
+		this.shiftRequestRepository = shiftRequestRepository;
 	}
 
 	@Transactional(readOnly = true)
@@ -54,10 +60,12 @@ public class StoreOverviewService {
 				storeMemberRepository.countByStore_IdAndStatus(storeId, MemberStatus.PENDING));
 		return new StoreOverview(
 				todayWorkerCount,
-				0,
+				Math.toIntExact(shiftRequestRepository.countByShift_Store_IdAndStatus(
+						storeId, RequestStatus.PENDING_APPROVAL)),
 				pendingMemberCount,
 				emptyShifts.size(),
-				0,
+				Math.toIntExact(shiftRequestRepository.countByShift_Store_IdAndTypeAndStatus(
+						storeId, RequestType.OPEN_SHIFT, RequestStatus.OPEN)),
 				todayShifts,
 				emptyShifts
 		);

@@ -4,8 +4,14 @@ import com.daetaguham.shift.application.InvalidShiftException;
 import com.daetaguham.shift.application.InvalidShiftWorkerException;
 import com.daetaguham.shift.application.ShiftBulkConflictException;
 import com.daetaguham.shift.application.ShiftNotFoundException;
+import com.daetaguham.shift.application.ShiftReferencedByRequestException;
 import com.daetaguham.shift.application.ShiftTimeConflictException;
 import com.daetaguham.shift.api.ShiftBulkConflictResponse;
+import com.daetaguham.request.application.ActiveShiftRequestExistsException;
+import com.daetaguham.request.application.InvalidRequestStateException;
+import com.daetaguham.request.application.InvalidShiftRequestException;
+import com.daetaguham.request.application.ShiftRequestForbiddenException;
+import com.daetaguham.request.application.ShiftRequestNotFoundException;
 import com.daetaguham.user.application.DuplicatePhoneException;
 import com.daetaguham.user.application.InvalidAvailabilityException;
 import com.daetaguham.user.application.InvalidCredentialsException;
@@ -135,6 +141,36 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(ShiftNotFoundException.class)
 	ResponseEntity<ApiErrorResponse> handleShiftNotFound(ShiftNotFoundException exception) {
 		return error(HttpStatus.NOT_FOUND, "SHIFT_NOT_FOUND", exception.getMessage());
+	}
+
+	@ExceptionHandler(ShiftReferencedByRequestException.class)
+	ResponseEntity<ApiErrorResponse> handleShiftReferencedByRequest(ShiftReferencedByRequestException exception) {
+		return error(HttpStatus.CONFLICT, "SHIFT_HAS_REQUEST", exception.getMessage());
+	}
+
+	@ExceptionHandler(InvalidShiftRequestException.class)
+	ResponseEntity<ApiErrorResponse> handleInvalidShiftRequest(InvalidShiftRequestException exception) {
+		return error(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", exception.getMessage());
+	}
+
+	@ExceptionHandler(ShiftRequestNotFoundException.class)
+	ResponseEntity<ApiErrorResponse> handleShiftRequestNotFound(ShiftRequestNotFoundException exception) {
+		return error(HttpStatus.NOT_FOUND, "REQUEST_NOT_FOUND", exception.getMessage());
+	}
+
+	@ExceptionHandler(ShiftRequestForbiddenException.class)
+	ResponseEntity<ApiErrorResponse> handleShiftRequestForbidden(ShiftRequestForbiddenException exception) {
+		return error(HttpStatus.FORBIDDEN, "REQUEST_FORBIDDEN", exception.getMessage());
+	}
+
+	@ExceptionHandler(ActiveShiftRequestExistsException.class)
+	ResponseEntity<ApiErrorResponse> handleActiveShiftRequestExists(ActiveShiftRequestExistsException exception) {
+		return error(HttpStatus.CONFLICT, "ACTIVE_REQUEST_EXISTS", exception.getMessage());
+	}
+
+	@ExceptionHandler(InvalidRequestStateException.class)
+	ResponseEntity<ApiErrorResponse> handleInvalidRequestState(InvalidRequestStateException exception) {
+		return error(HttpStatus.CONFLICT, "INVALID_REQUEST_STATE", exception.getMessage());
 	}
 
 	@ExceptionHandler(DataIntegrityViolationException.class)

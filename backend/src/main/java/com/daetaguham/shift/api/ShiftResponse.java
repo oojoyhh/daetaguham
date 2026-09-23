@@ -17,7 +17,10 @@ public record ShiftResponse(
 		Object openRequest
 ) {
 	public static ShiftResponse from(ManagedShift managedShift) {
-		Shift shift = managedShift.shift();
+		return from(managedShift.shift(), managedShift.helper(), null);
+	}
+
+	public static ShiftResponse from(Shift shift, boolean helper, Object openRequest) {
 		return new ShiftResponse(
 				shift.getId(),
 				shift.getStore().getId(),
@@ -26,8 +29,8 @@ public record ShiftResponse(
 				shift.getStartAt(),
 				shift.getEndAt(),
 				shift.getPosition(),
-				managedShift.helper(),
-				null
+				helper,
+				openRequest
 		);
 	}
 }
