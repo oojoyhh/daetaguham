@@ -1,7 +1,9 @@
 package com.daetaguham.user.api;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -121,5 +123,19 @@ class LoginApiIntegrationTest {
 				.header(HttpHeaders.AUTHORIZATION, "Bearer invalid-token"))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+	}
+
+	@Test
+	void allowsFrontendOriginToCallApi() throws Exception {
+		mockMvc.perform(options("/auth/login")
+				.header(HttpHeaders.ORIGIN, "http://127.0.0.1:8767")
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "content-type"))
+				.andExpect(status().isOk())
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+						.header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN,
+								"http://127.0.0.1:8767"))
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+						.header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, containsString("POST")));
 	}
 }

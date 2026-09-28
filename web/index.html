@@ -22,6 +22,9 @@
     .role-card .chev { font-size: 24px; }
     .demo-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .demo-actions .btn { padding: 0 10px; font-size: 13px; }
+    .live-entry { display:grid; gap:7px; padding:18px; background:var(--surface); border:1px solid var(--line); border-radius:18px; }
+    .live-entry b { font-size:16px; }
+    .live-entry p { color:var(--muted); font-size:13px; }
     .footnote { margin-top: 2px; text-align: center; color: var(--muted); font-size: 12px; }
   </style>
 </head>
@@ -36,7 +39,13 @@
     <p class="prototype-note"><b>체험용 프로토타입</b><br>아래 역할을 선택하면 준비된 샘플 데이터로 주요 화면을 둘러볼 수 있어요.</p>
 
     <main class="content">
-      <h2 class="section-title">역할을 선택하세요</h2>
+      <section class="live-entry" aria-labelledby="liveTitle">
+        <b id="liveTitle">실제 데이터로 시작하기</b>
+        <p>백엔드와 PostgreSQL에 저장되는 계정을 사용해요.</p>
+        <a class="btn btn-primary btn-block" href="login.html">로그인 · 회원가입</a>
+      </section>
+
+      <h2 class="section-title">샘플 화면 둘러보기</h2>
       <section class="role-list" aria-label="역할별 데모">
         <a class="card role-card" href="worker/home.html">
           <span class="role-no" aria-hidden="true">01</span>
@@ -59,7 +68,7 @@
         <a class="btn" href="screens.html">전체 화면 보기</a>
         <button class="btn" type="button" id="resetDemo">데모 초기화</button>
       </div>
-      <p class="footnote">서버 연동 전 UI·서비스 설계 검증을 위한 버전입니다.</p>
+      <p class="footnote">샘플 역할 화면은 실제 계정 데이터를 바꾸지 않아요.</p>
     </main>
   </div>
 

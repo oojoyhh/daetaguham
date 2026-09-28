@@ -28,14 +28,14 @@
 
     <main class="content">
       <section class="card profile">
-        <span class="avatar">석휘</span>
-        <div><b>한석휘</b><p class="muted num">010-1111-2222</p></div>
+        <span class="avatar" data-auth-avatar>석휘</span>
+        <div><b data-auth-name>한석휘</b><p class="muted num" data-auth-phone>010-1111-2222</p></div>
       </section>
 
       <h2 class="section-title">내 매장</h2>
       <section class="card tight">
         <div class="setting-row">
-          <div class="grow"><b class="store-name">건대점</b><small>알바생 · 2023년 3월부터</small></div>
+          <div class="grow"><b class="store-name" data-auth-store>건대점</b><small>알바생 · 승인된 매장</small></div>
         </div>
         <a class="setting-row" href="join.html">
           <div class="grow"><b style="color:var(--accent)">+ 다른 매장 참여하기</b><small>초대코드가 필요해요</small></div>
@@ -50,7 +50,7 @@
         <span class="api-tag" style="margin-top:6px">PUT /me/availabilities</span>
       </div>
 
-      <a class="btn btn-text btn-block" href="../login.html">로그아웃</a>
+      <a class="btn btn-text btn-block" href="../login.html" data-logout>로그아웃</a>
     </main>
 
     <nav class="tabbar" data-role="worker" data-active="me"></nav>

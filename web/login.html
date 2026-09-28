@@ -10,8 +10,9 @@
     .brand .mark { width: 52px; height: 52px; border-radius: 16px; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 22px; font-weight: 800; }
     .brand h1 { font-size: 28px; font-weight: 800; letter-spacing: -.02em; margin-top: 20px; }
     .brand p { color: var(--ink-2); margin-top: 6px; }
-    .demo { font-size: 12.5px; color: var(--muted); background: var(--surface); border-radius: 14px; padding: 12px 14px; line-height: 1.7; }
-    .demo b { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+    .demo { font-size: 12.5px; color: var(--muted); background: var(--surface); border-radius: 14px; padding: 12px 14px; line-height: 1.65; }
+    .demo b { color: var(--ink-2); }
+    .demo a { color: var(--accent); font-weight: 750; }
   </style>
 </head>
 <body>
@@ -40,9 +41,9 @@
       <button class="btn btn-text btn-block" type="button" id="signupBtn">처음이에요 · 회원가입</button>
 
       <div class="demo">
-        시연용 계정 (비밀번호 아무거나 4자 이상)<br>
-        알바생 <b>010-1111-2222</b> · 점장 <b>010-3333-4444</b><br>
-        사장 <b>010-5555-6666</b>
+        <b>이제 실제 백엔드와 연결돼요.</b><br>
+        가입한 계정으로 로그인하거나 새 계정을 만들어 주세요.
+        준비된 화면만 둘러보려면 <a href="index.html">체험용 역할 선택</a>으로 돌아갈 수 있어요.
       </div>
     </main>
   </div>
@@ -75,55 +76,75 @@
 
   <script src="js/common.js"></script>
   <script>
-    const ACCOUNTS = {
-      "01011112222": "worker/home.html",
-      "01033334444": "manager/today.html",
-      "01055556666": "owner/stores.html",
-    };
-
     ["phone", "suPhone"].forEach((id) => {
       const el = document.getElementById(id);
       el.addEventListener("input", () => (el.value = formatPhone(el.value)));
     });
 
-    document.getElementById("loginForm").addEventListener("submit", (e) => {
+    const showError = (element, message) => {
+      element.textContent = message;
+      element.hidden = false;
+    };
+
+    const setBusy = (button, busy, busyLabel) => {
+      if (!button.dataset.label) button.dataset.label = button.textContent;
+      button.disabled = busy;
+      button.setAttribute("aria-busy", String(busy));
+      button.textContent = busy ? busyLabel : button.dataset.label;
+    };
+
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const digits = document.getElementById("phone").value.replace(/\D/g, "");
+      const phone = document.getElementById("phone").value;
+      const digits = phone.replace(/\D/g, "");
       const pw = document.getElementById("pw").value;
       const err = document.getElementById("loginError");
+      const button = e.currentTarget.querySelector('[type="submit"]');
+      err.hidden = true;
 
-      if (digits.length !== 11 || pw.length < 4) {
-        err.textContent = "휴대폰 번호 11자리와 비밀번호를 입력해 주세요.";
-        err.hidden = false;
+      if (digits.length !== 11 || !pw) {
+        showError(err, "휴대폰 번호 11자리와 비밀번호를 입력해 주세요.");
         return;
       }
-      if (!ACCOUNTS[digits]) {
-        err.textContent = "휴대폰 번호나 비밀번호가 맞지 않아요.";
-        err.hidden = false;
-        return;
+      setBusy(button, true, "로그인 중…");
+      try {
+        const session = await DaetaguhamApi.login(formatPhone(digits), pw);
+        location.href = DaetaguhamApi.homePath(session);
+      } catch (error) {
+        showError(err, error.message || "로그인하지 못했어요.");
+      } finally {
+        setBusy(button, false, "");
       }
-      location.href = ACCOUNTS[digits];
     });
 
     const sheet = document.getElementById("signupSheet");
     document.getElementById("signupBtn").addEventListener("click", () => sheet.showModal());
     document.getElementById("signupClose").addEventListener("click", () => sheet.close());
 
-    document.getElementById("signupForm").addEventListener("submit", (e) => {
+    document.getElementById("signupForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const name = document.getElementById("suName").value.trim();
       const digits = document.getElementById("suPhone").value.replace(/\D/g, "");
       const pw = document.getElementById("suPw").value;
       const err = document.getElementById("signupError");
+      const button = e.currentTarget.querySelector('[type="submit"]');
+      err.hidden = true;
 
       let msg = "";
       if (!name) msg = "이름을 입력해 주세요.";
       else if (digits.length !== 11) msg = "휴대폰 번호 11자리를 입력해 주세요.";
-      else if (ACCOUNTS[digits]) msg = "이미 가입된 번호예요. 로그인해 주세요.";
       else if (pw.length < 8) msg = "비밀번호는 8자 이상이어야 해요.";
 
-      if (msg) { err.textContent = msg; err.hidden = false; return; }
-      location.href = `start.html?name=${encodeURIComponent(name)}`;
+      if (msg) { showError(err, msg); return; }
+      setBusy(button, true, "가입 중…");
+      try {
+        await DaetaguhamApi.signup(name, formatPhone(digits), pw);
+        location.href = `start.html?name=${encodeURIComponent(name)}`;
+      } catch (error) {
+        showError(err, error.message || "회원가입을 완료하지 못했어요.");
+      } finally {
+        setBusy(button, false, "");
+      }
     });
   </script>
 </body>

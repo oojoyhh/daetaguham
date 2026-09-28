@@ -43,6 +43,154 @@
 
   const params = new URLSearchParams(location.search);
 
+  // ---------- 실제 API·인증 ----------
+  // 배포할 때는 아래 값을 실제 HTTPS 백엔드 주소로 바꿔요.
+  // 사용자 입력으로 API 주소를 바꾸지 못하게 해 JWT가 임의 서버로 전송되지 않도록 합니다.
+  const DEPLOYED_API_BASE = "";
+  const AUTH_KEY = "daetaguham-auth-v1";
+
+  class ApiError extends Error {
+    constructor(message, options = {}) {
+      super(message);
+      this.name = "ApiError";
+      this.status = options.status || 0;
+      this.code = options.code || "API_ERROR";
+      this.details = options.details || null;
+    }
+  }
+
+  const readStoredJson = (key) => {
+    try { return JSON.parse(localStorage.getItem(key) || "null"); }
+    catch (error) { return null; }
+  };
+
+  const apiBaseUrl = ["127.0.0.1", "localhost"].includes(location.hostname)
+    ? `http://${location.hostname}:8080/api`
+    : DEPLOYED_API_BASE;
+
+  const api = {
+    baseUrl: apiBaseUrl,
+
+    getSession() {
+      const session = readStoredJson(AUTH_KEY);
+      return session?.token && session?.user ? session : null;
+    },
+
+    saveSession(session) {
+      const saved = {
+        token: session.token,
+        user: session.user,
+        stores: Array.isArray(session.stores) ? session.stores : [],
+      };
+      try { localStorage.setItem(AUTH_KEY, JSON.stringify(saved)); } catch (error) {
+        throw new ApiError("로그인 정보를 이 브라우저에 저장할 수 없어요.", { code: "AUTH_STORAGE_FAILED" });
+      }
+      return saved;
+    },
+
+    clearSession() {
+      try { localStorage.removeItem(AUTH_KEY); } catch (error) { /* 무시 */ }
+    },
+
+    isSignedIn() {
+      return Boolean(this.getSession());
+    },
+
+    async request(path, options = {}) {
+      if (!apiBaseUrl) {
+        throw new ApiError("배포용 백엔드 API 주소가 아직 설정되지 않았어요.", { code: "API_NOT_CONFIGURED" });
+      }
+      const auth = options.auth !== false;
+      const session = this.getSession();
+      if (auth && !session?.token) {
+        throw new ApiError("로그인이 필요해요.", { status: 401, code: "AUTH_REQUIRED" });
+      }
+
+      const headers = new Headers(options.headers || {});
+      headers.set("Accept", "application/json");
+      if (auth) headers.set("Authorization", `Bearer ${session.token}`);
+      let body = options.body;
+      if (body !== undefined && body !== null && !(body instanceof FormData)) {
+        headers.set("Content-Type", "application/json");
+        body = JSON.stringify(body);
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), options.timeout || 10000);
+      let response;
+      try {
+        response = await fetch(`${apiBaseUrl}${path}`, {
+          method: options.method || "GET",
+          headers,
+          body,
+          signal: controller.signal,
+        });
+      } catch (error) {
+        const timedOut = error?.name === "AbortError";
+        throw new ApiError(
+          timedOut
+            ? "서버 응답이 늦어요. 잠시 후 다시 시도해 주세요."
+            : "백엔드 서버에 연결할 수 없어요. 서버가 실행 중인지 확인해 주세요.",
+          { code: timedOut ? "API_TIMEOUT" : "API_UNREACHABLE" }
+        );
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+      const payload = response.status === 204
+        ? null
+        : contentType.includes("application/json")
+          ? await response.json()
+          : await response.text();
+      if (!response.ok) {
+        if (auth && response.status === 401) this.clearSession();
+        throw new ApiError(
+          payload?.message || "요청을 처리하지 못했어요.",
+          { status: response.status, code: payload?.errorCode || "API_ERROR", details: payload }
+        );
+      }
+      return payload;
+    },
+
+    async login(phone, password) {
+      const result = await this.request("/auth/login", {
+        method: "POST",
+        auth: false,
+        body: { phone, password },
+      });
+      return this.saveSession(result);
+    },
+
+    async signup(name, phone, password) {
+      await this.request("/auth/signup", {
+        method: "POST",
+        auth: false,
+        body: { name, phone, password },
+      });
+      return this.login(phone, password);
+    },
+
+    async refreshSession() {
+      const account = await this.request("/me");
+      const current = this.getSession();
+      return this.saveSession({ token: current.token, ...account });
+    },
+
+    homePath(session = this.getSession()) {
+      const stores = (session?.stores || []).filter((store) =>
+        !store.memberStatus || store.memberStatus === "ACTIVE"
+      );
+      if (stores.some((store) => store.myRole === "OWNER")) return "owner/stores.html";
+      if (stores.some((store) => store.myRole === "MANAGER")) return "manager/today.html";
+      if (stores.some((store) => store.myRole === "WORKER")) return "worker/home.html";
+      return "start.html";
+    },
+  };
+
+  window.ApiError = ApiError;
+  window.DaetaguhamApi = api;
+
   // 점장 화면을 사장이 같이 쓸 때 (?role=owner) 헤더 계정 정보를 사장으로
   const isOwnerView = params.get("role") === "owner" && document.querySelector("nav.tabbar[data-role-param]");
   if (isOwnerView) {
@@ -83,6 +231,9 @@
   let taps = 0;
   let tapTimer;
   document.addEventListener("click", (e) => {
+    const logout = e.target.closest("[data-logout]");
+    if (logout) api.clearSession();
+
     if (e.target.closest(".topbar h1")) {
       taps += 1;
       clearTimeout(tapTimer);
@@ -183,6 +334,43 @@
 
   window.escapeHTML = (s) =>
     String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  // 로그인 상태에서는 샘플 이름 대신 실제 계정 정보를 보여줘요.
+  const authSession = api.getSession();
+  if (authSession) {
+    const pathname = location.pathname;
+    const pageRole = pathname.includes("/owner/") || params.get("role") === "owner"
+      ? "OWNER"
+      : pathname.includes("/manager/")
+        ? "MANAGER"
+        : "WORKER";
+    const activeStores = (authSession.stores || []).filter((store) =>
+      !store.memberStatus || store.memberStatus === "ACTIVE"
+    );
+    const roleStores = activeStores.filter((store) => store.myRole === pageRole);
+    const currentStore = roleStores[0] || activeStores[0];
+    const roleLabel = { OWNER: "사장님", MANAGER: "점장", WORKER: "" }[pageRole];
+
+    document.querySelectorAll(".account-meta").forEach((meta) => {
+      const title = roleLabel ? `${authSession.user.name} ${roleLabel}` : authSession.user.name;
+      const sub = pageRole === "OWNER" && roleStores.length > 1
+        ? `${roleStores.length}개 매장 운영`
+        : currentStore?.storeName || "매장 설정 필요";
+      meta.innerHTML = `<b>${window.escapeHTML(title)}</b><small>${window.escapeHTML(sub)}</small>`;
+    });
+    document.querySelectorAll("[data-auth-name]").forEach((element) => {
+      element.textContent = authSession.user.name;
+    });
+    document.querySelectorAll("[data-auth-phone]").forEach((element) => {
+      element.textContent = authSession.user.phone;
+    });
+    document.querySelectorAll("[data-auth-avatar]").forEach((element) => {
+      element.textContent = window.shortName(authSession.user.name);
+    });
+    document.querySelectorAll("[data-auth-store]").forEach((element) => {
+      element.textContent = currentStore?.storeName || "소속 매장 없음";
+    });
+  }
 
   // ---------- 근무표 전달사항 ----------
   // 점장 근무표와 직원 캘린더가 같은 내용을 읽어요. 실제 서비스에서는 매장 공지 API로 대체하면 돼요.

@@ -41,7 +41,7 @@
   </div>
   <script src="js/common.js"></script>
   <script>
-    const userName = params.get("name");
+    const userName = params.get("name") || DaetaguhamApi.getSession()?.user?.name;
     if (userName) document.getElementById("hello").textContent = `${userName}님, 반가워요!`;
   </script>
 </body>
