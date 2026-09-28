@@ -49,3 +49,7 @@ app:
       issuer: ${JWT_ISSUER:daetaguham}
       secret: ${JWT_SECRET:dev-only-secret-change-before-deploy-2026}
       access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:PT1H}
+  requests:
+    expiration:
+      initial-delay: ${REQUEST_EXPIRATION_INITIAL_DELAY:PT30S}
+      fixed-delay: ${REQUEST_EXPIRATION_FIXED_DELAY:PT1M}

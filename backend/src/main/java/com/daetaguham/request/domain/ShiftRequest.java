@@ -130,6 +130,13 @@ public class ShiftRequest {
 		confirmedAt = LocalDateTime.now();
 	}
 
+	public void expire() {
+		if (status != RequestStatus.OPEN && status != RequestStatus.PENDING_APPROVAL) {
+			throw new IllegalStateException("진행 중인 요청만 만료할 수 있어요.");
+		}
+		status = RequestStatus.EXPIRED;
+	}
+
 	@PrePersist
 	void assignCreatedAt() {
 		if (createdAt == null) {

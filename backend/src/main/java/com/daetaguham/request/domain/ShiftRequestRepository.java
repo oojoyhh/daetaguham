@@ -3,13 +3,17 @@ package com.daetaguham.request.domain;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.List;
+import java.time.LocalDateTime;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
+
+import jakarta.persistence.LockModeType;
 
 public interface ShiftRequestRepository extends JpaRepository<ShiftRequest, Long> {
 
@@ -38,4 +42,18 @@ public interface ShiftRequestRepository extends JpaRepository<ShiftRequest, Long
 
 	@EntityGraph(attributePaths = {"shift", "shift.store", "shift.store.owner", "shift.worker", "requester"})
 	Page<ShiftRequest> findAllByRequester_IdOrderByCreatedAtDescIdDesc(Long requesterId, Pageable pageable);
+
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@EntityGraph(attributePaths = {"shift", "shift.store", "shift.worker", "requester"})
+	@Query("""
+			select request
+			from ShiftRequest request
+			where request.status in :statuses
+			  and request.shift.startAt <= :cutoff
+			order by request.shift.startAt asc, request.id asc
+			""")
+	List<ShiftRequest> findDueForExpiration(
+			@Param("statuses") Collection<RequestStatus> statuses,
+			@Param("cutoff") LocalDateTime cutoff
+	);
 }

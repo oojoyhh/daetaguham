@@ -188,6 +188,24 @@ public class NotificationService {
 				applicant.getName() + "님이 " + store.getName() + " 참여를 신청했어요.");
 	}
 
+	@Transactional
+	public int notifyExpired(ShiftRequest request, Collection<User> participants) {
+		Map<Long, User> recipients = new LinkedHashMap<>();
+		recipients.put(request.getRequester().getId(), request.getRequester());
+		participants.forEach(user -> recipients.putIfAbsent(user.getId(), user));
+		String position = request.getShift().getPosition();
+		String shiftLabel = position == null || position.isBlank() ? "근무" : position + " 근무";
+		String message = request.getShift().getStartAt().toLocalDate() + " "
+				+ shiftLabel + " 요청이 마감됐어요.";
+		return saveAll(
+				recipients.values(),
+				NotificationType.EXPIRED,
+				request,
+				request.getShift().getStore(),
+				message
+		);
+	}
+
 	private List<User> managementUsers(Store store) {
 		Map<Long, User> users = new LinkedHashMap<>();
 		users.put(store.getOwner().getId(), store.getOwner());
