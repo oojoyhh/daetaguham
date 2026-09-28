@@ -28,6 +28,7 @@ import com.daetaguham.store.domain.StoreRepository;
 import com.daetaguham.user.application.InvalidCredentialsException;
 import com.daetaguham.user.domain.User;
 import com.daetaguham.user.domain.UserRepository;
+import com.daetaguham.request.application.ApplicationService.ApplicationView;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +46,7 @@ public class RequestService {
 	private final StoreRepository storeRepository;
 	private final StoreMemberRepository storeMemberRepository;
 	private final UserRepository userRepository;
+	private final ApplicationService applicationService;
 
 	public RequestService(
 			ShiftRequestRepository requestRepository,
@@ -52,7 +54,8 @@ public class RequestService {
 			ShiftRepository shiftRepository,
 			StoreRepository storeRepository,
 			StoreMemberRepository storeMemberRepository,
-			UserRepository userRepository
+			UserRepository userRepository,
+			ApplicationService applicationService
 	) {
 		this.requestRepository = requestRepository;
 		this.availableDateRepository = availableDateRepository;
@@ -60,6 +63,7 @@ public class RequestService {
 		this.storeRepository = storeRepository;
 		this.storeMemberRepository = storeMemberRepository;
 		this.userRepository = userRepository;
+		this.applicationService = applicationService;
 	}
 
 	@Transactional
@@ -78,10 +82,8 @@ public class RequestService {
 			throw new InvalidShiftRequestException("대타 또는 교대 요청만 등록할 수 있어요.");
 		}
 		RequestMode resolvedMode = mode == null ? RequestMode.PUBLIC : mode;
-		if (resolvedMode == RequestMode.DIRECT) {
-			throw new InvalidShiftRequestException("직접 제안은 지원 기능에서 등록해 주세요.");
-		}
-		if (targetUserId != null || (targetShiftIds != null && !targetShiftIds.isEmpty())) {
+		if (resolvedMode == RequestMode.PUBLIC
+				&& (targetUserId != null || (targetShiftIds != null && !targetShiftIds.isEmpty()))) {
 			throw new InvalidShiftRequestException("공개 요청에는 특정 직원이나 근무를 지정하지 않아요.");
 		}
 
@@ -100,8 +102,9 @@ public class RequestService {
 		ensureNoActiveRequest(shift.getId());
 
 		RequestScope resolvedScope = scope == null ? RequestScope.STORE : scope;
-		List<LocalDate> normalizedDates = validateRequestDetails(
-				type, resolvedScope, availableDates, actorId, shift);
+		List<LocalDate> normalizedDates = resolvedMode == RequestMode.PUBLIC
+				? validateRequestDetails(type, resolvedScope, availableDates, actorId, shift)
+				: validateDirectRequestDetails(type, resolvedScope, availableDates);
 		String normalizedReason = normalizeText(reason, 100, "요청 사유는 100자 이내로 입력해 주세요.");
 
 		ShiftRequest request = requestRepository.save(ShiftRequest.create(
@@ -109,7 +112,10 @@ public class RequestService {
 		availableDateRepository.saveAll(normalizedDates.stream()
 				.map(date -> RequestAvailableDate.create(request, date))
 				.toList());
-		return toView(request, normalizedDates);
+		if (resolvedMode == RequestMode.DIRECT) {
+			applicationService.createProposal(request, targetUserId, targetShiftIds);
+		}
+		return toView(request, normalizedDates, actorId);
 	}
 
 	@Transactional
@@ -151,14 +157,14 @@ public class RequestService {
 				owner,
 				normalizedMessage
 		));
-		return new OpenShiftResult(toView(request, List.of()), 0);
+		return new OpenShiftResult(toView(request, List.of(), actorId), 0);
 	}
 
 	@Transactional(readOnly = true)
 	public RequestView find(Long actorId, Long requestId) {
 		ShiftRequest request = findDetailed(requestId);
 		requireVisible(actorId, request);
-		return toView(request, findDates(request.getId()));
+		return toView(request, findDates(request.getId()), actorId);
 	}
 
 	@Transactional
@@ -172,7 +178,63 @@ public class RequestService {
 		} catch (IllegalStateException exception) {
 			throw new InvalidRequestStateException(exception.getMessage());
 		}
-		return toView(request, findDates(request.getId()));
+		return toView(request, findDates(request.getId()), actorId);
+	}
+
+	@Transactional
+	public RequestView retryProposal(
+			Long actorId,
+			Long requestId,
+			Long targetUserId,
+			Collection<Long> targetShiftIds,
+			Collection<LocalDate> availableDates,
+			boolean switchToPublic,
+			RequestScope scope
+	) {
+		ShiftRequest request = findDetailed(requestId);
+		if (!request.getRequester().getId().equals(actorId)) {
+			throw new ShiftRequestForbiddenException();
+		}
+		if (request.getMode() != RequestMode.DIRECT || request.getStatus() != RequestStatus.OPEN) {
+			throw new InvalidRequestStateException("모집 중인 지정 요청만 다시 제안할 수 있어요.");
+		}
+		if (applicationService.hasActiveProposal(requestId)) {
+			throw new InvalidRequestStateException("먼저 현재 지정 제안의 응답을 기다려 주세요.");
+		}
+
+		if (switchToPublic) {
+			if (targetUserId != null || (targetShiftIds != null && !targetShiftIds.isEmpty())) {
+				throw new InvalidShiftRequestException("공개 전환과 직원 지정은 동시에 할 수 없어요.");
+			}
+			RequestScope resolvedScope = scope == null ? RequestScope.STORE : scope;
+			List<LocalDate> dates = validateRequestDetails(
+					request.getType(), resolvedScope, availableDates, actorId, request.getShift());
+			request.switchToPublic(resolvedScope);
+			availableDateRepository.saveAll(dates.stream()
+					.map(date -> RequestAvailableDate.create(request, date))
+					.toList());
+			return toView(request, dates, actorId);
+		}
+
+		if (availableDates != null && !availableDates.isEmpty()) {
+			throw new InvalidShiftRequestException("지정 제안에는 교대 가능 날짜를 입력하지 않아요.");
+		}
+		applicationService.createProposal(request, targetUserId, targetShiftIds);
+		return toView(request, List.of(), actorId);
+	}
+
+	private List<LocalDate> validateDirectRequestDetails(
+			RequestType type,
+			RequestScope scope,
+			Collection<LocalDate> availableDates
+	) {
+		if (availableDates != null && !availableDates.isEmpty()) {
+			throw new InvalidShiftRequestException("지정 제안에는 교대 가능 날짜를 입력하지 않아요.");
+		}
+		if (type == RequestType.EXCHANGE && scope != RequestScope.STORE) {
+			throw new InvalidShiftRequestException("교대 요청은 같은 매장 안에서만 등록할 수 있어요.");
+		}
+		return List.of();
 	}
 
 	private List<LocalDate> validateRequestDetails(
@@ -258,7 +320,7 @@ public class RequestService {
 				.toList();
 	}
 
-	private RequestView toView(ShiftRequest request, List<LocalDate> dates) {
+	private RequestView toView(ShiftRequest request, List<LocalDate> dates, Long actorId) {
 		Shift shift = request.getShift();
 		// open-in-view=false에서도 컨트롤러가 응답을 안전하게 만들 수 있도록
 		// 응답에 필요한 지연 연관을 트랜잭션 안에서 초기화한다.
@@ -272,7 +334,21 @@ public class RequestService {
 						shift.getStore().getId(), shift.getWorker().getId(), MemberStatus.ACTIVE);
 		boolean approvalRequired = request.getType() != RequestType.OPEN_SHIFT
 				&& shift.getStore().isApprovalRequired();
-		return new RequestView(request, dates, helper, approvalRequired);
+		List<ApplicationView> allApplications = applicationService.findAllViews(request.getId());
+		int applicantCount = (int) allApplications.stream()
+				.filter(application -> switch (application.application().getStatus()) {
+					case PROPOSED, APPLIED, SELECTED -> true;
+					default -> false;
+				})
+				.count();
+		List<ApplicationView> applications = request.getRequester().getId().equals(actorId)
+				? allApplications
+				: List.of();
+		ApplicationView myApplication = request.getRequester().getId().equals(actorId)
+				? null
+				: applicationService.findMyView(request.getId(), actorId);
+		return new RequestView(
+				request, dates, helper, approvalRequired, applicantCount, applications, myApplication);
 	}
 
 	private String normalizeRequired(String value, int maximum, String message) {
@@ -297,7 +373,10 @@ public class RequestService {
 			ShiftRequest request,
 			List<LocalDate> availableDates,
 			boolean helper,
-			boolean approvalRequired
+			boolean approvalRequired,
+			int applicantCount,
+			List<ApplicationView> applications,
+			ApplicationView myApplication
 	) {
 	}
 

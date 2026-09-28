@@ -18,6 +18,7 @@ import com.daetaguham.shift.domain.ShiftRepository;
 import com.daetaguham.shift.domain.ShiftTemplate;
 import com.daetaguham.shift.domain.ShiftTemplateRepository;
 import com.daetaguham.request.domain.ShiftRequestRepository;
+import com.daetaguham.request.domain.ApplicationOfferShiftRepository;
 import com.daetaguham.store.application.StoreManagementForbiddenException;
 import com.daetaguham.store.application.StoreNotFoundException;
 import com.daetaguham.store.domain.MemberRole;
@@ -42,6 +43,7 @@ public class ShiftService {
 	private final ShiftTemplateRepository shiftTemplateRepository;
 	private final ShiftRepository shiftRepository;
 	private final ShiftRequestRepository shiftRequestRepository;
+	private final ApplicationOfferShiftRepository applicationOfferShiftRepository;
 
 	public ShiftService(
 			StoreRepository storeRepository,
@@ -49,7 +51,8 @@ public class ShiftService {
 			UserRepository userRepository,
 			ShiftTemplateRepository shiftTemplateRepository,
 			ShiftRepository shiftRepository,
-			ShiftRequestRepository shiftRequestRepository
+			ShiftRequestRepository shiftRequestRepository,
+			ApplicationOfferShiftRepository applicationOfferShiftRepository
 	) {
 		this.storeRepository = storeRepository;
 		this.storeMemberRepository = storeMemberRepository;
@@ -57,6 +60,7 @@ public class ShiftService {
 		this.shiftTemplateRepository = shiftTemplateRepository;
 		this.shiftRepository = shiftRepository;
 		this.shiftRequestRepository = shiftRequestRepository;
+		this.applicationOfferShiftRepository = applicationOfferShiftRepository;
 	}
 
 	@Transactional(readOnly = true)
@@ -230,7 +234,7 @@ public class ShiftService {
 		}
 
 		List<Shift> toDelete = existingByKey.values().stream().flatMap(Deque::stream).toList();
-		if (toDelete.stream().anyMatch(shift -> shiftRequestRepository.existsByShift_Id(shift.getId()))) {
+		if (toDelete.stream().anyMatch(shift -> isReferencedByRequest(shift.getId()))) {
 			throw new ShiftReferencedByRequestException();
 		}
 		shiftRepository.deleteAll(toDelete);
@@ -293,9 +297,14 @@ public class ShiftService {
 	}
 
 	private void requireNoRequestReference(Long shiftId) {
-		if (shiftRequestRepository.existsByShift_Id(shiftId)) {
+		if (isReferencedByRequest(shiftId)) {
 			throw new ShiftReferencedByRequestException();
 		}
+	}
+
+	private boolean isReferencedByRequest(Long shiftId) {
+		return shiftRequestRepository.existsByShift_Id(shiftId)
+				|| applicationOfferShiftRepository.existsByShift_Id(shiftId);
 	}
 
 	private Store findStore(Long storeId) {

@@ -1,7 +1,7 @@
 # 백엔드 개발 체크리스트
 
 > 최종 갱신: 2026-09-23  
-> 현재 DB 구현: 12개 테이블 중 9개 (`users`, `stores`, `store_members`, `shift_templates`, `shifts`, `availabilities`, `store_notices`, `shift_requests`, `request_available_dates`)
+> 현재 DB 구현: 12개 테이블 중 11개 (`users`, `stores`, `store_members`, `shift_templates`, `shifts`, `availabilities`, `store_notices`, `shift_requests`, `request_available_dates`, `request_applications`, `application_offer_shifts`)
 
 ## 1. 프로젝트 기반
 
@@ -56,13 +56,14 @@
 - [x] 사장 급구 `OPEN_SHIFT` 공개 모집과 빈 근무 동시 생성
 - [x] 매장 공개·동일 사장 다른 매장 공개 범위
 - [x] 과거 근무 차단·진행 중 요청 중복 방지·취소 상태 규칙
-- [ ] 지정 요청 (`DIRECT`) — 지원 테이블과 함께 구현
+- [x] 지정 요청 (`DIRECT`)과 거절 후 재제안·공개 전환
 - [ ] 급구 대상 알림 저장 — 알림 테이블 구현 때 연결
 
 ## 7. 지원·승인·근무표 반영
 
-- [ ] `request_applications` 지원·지정 제안
-- [ ] `application_offer_shifts` 교대 후보 근무 M:N
+- [x] `request_applications` 공개 지원·철회·재지원·지정 제안
+- [x] `application_offer_shifts` 교대 후보 근무 M:N
+- [x] 지정 제안 수락·거절과 승인 대기 전환
 - [ ] 사장·점장 승인·반려
 - [ ] 승인 시 대타 담당자 변경·교대 담당자 스와프
 - [ ] 확정된 변경을 요청·지원 기록과 함께 보존
@@ -86,7 +87,7 @@
 
 ## 다음 작업 순서
 
-1. 지원·지정 제안과 교대 후보 근무
+1. 공개 지원자 선택·미선택 처리
 2. 승인·반려와 실제 근무표 반영
 3. 알림·추천
 4. HTML 화면 API 연결

@@ -19,13 +19,13 @@ public record RequestDetailResponse(
 		ShiftResponse shift,
 		int applicantCount,
 		List<LocalDate> availableDates,
-		Object myApplicationStatus,
+		String myApplicationStatus,
 		LocalDateTime createdAt,
 		String reason,
 		boolean approvalRequired,
 		LocalDateTime confirmedAt,
-		List<Object> applications,
-		Object myApplication
+		List<ApplicationResponse> applications,
+		ApplicationResponse myApplication
 ) {
 	public static RequestDetailResponse from(RequestView view) {
 		ShiftRequest request = view.request();
@@ -38,15 +38,15 @@ public record RequestDetailResponse(
 				request.getShift().getStore().getName(),
 				request.getRequester().getName(),
 				ShiftResponse.from(request.getShift(), view.helper(), RequestBriefResponse.from(request)),
-				0,
+				view.applicantCount(),
 				view.availableDates(),
-				null,
+				view.myApplication() == null ? null : view.myApplication().application().getStatus().name(),
 				request.getCreatedAt(),
 				request.getReason(),
 				view.approvalRequired(),
 				request.getConfirmedAt(),
-				List.of(),
-				null
+				view.applications().stream().map(ApplicationResponse::from).toList(),
+				view.myApplication() == null ? null : ApplicationResponse.from(view.myApplication())
 		);
 	}
 }

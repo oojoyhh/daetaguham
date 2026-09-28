@@ -12,6 +12,7 @@ import com.daetaguham.request.application.InvalidRequestStateException;
 import com.daetaguham.request.application.InvalidShiftRequestException;
 import com.daetaguham.request.application.ShiftRequestForbiddenException;
 import com.daetaguham.request.application.ShiftRequestNotFoundException;
+import com.daetaguham.request.application.RequestApplicationNotFoundException;
 import com.daetaguham.user.application.DuplicatePhoneException;
 import com.daetaguham.user.application.InvalidAvailabilityException;
 import com.daetaguham.user.application.InvalidCredentialsException;
@@ -156,6 +157,11 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(ShiftRequestNotFoundException.class)
 	ResponseEntity<ApiErrorResponse> handleShiftRequestNotFound(ShiftRequestNotFoundException exception) {
 		return error(HttpStatus.NOT_FOUND, "REQUEST_NOT_FOUND", exception.getMessage());
+	}
+
+	@ExceptionHandler(RequestApplicationNotFoundException.class)
+	ResponseEntity<ApiErrorResponse> handleRequestApplicationNotFound(RequestApplicationNotFoundException exception) {
+		return error(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", exception.getMessage());
 	}
 
 	@ExceptionHandler(ShiftRequestForbiddenException.class)

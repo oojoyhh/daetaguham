@@ -100,6 +100,21 @@ public class ShiftRequest {
 		status = RequestStatus.CANCELED;
 	}
 
+	public void markPendingApproval() {
+		if (status != RequestStatus.OPEN) {
+			throw new IllegalStateException("모집 중인 요청만 승인 대기로 변경할 수 있어요.");
+		}
+		status = RequestStatus.PENDING_APPROVAL;
+	}
+
+	public void switchToPublic(RequestScope scope) {
+		if (status != RequestStatus.OPEN || mode != RequestMode.DIRECT) {
+			throw new IllegalStateException("모집 중인 지정 요청만 공개 요청으로 전환할 수 있어요.");
+		}
+		this.mode = RequestMode.PUBLIC;
+		this.scope = Objects.requireNonNull(scope);
+	}
+
 	@PrePersist
 	void assignCreatedAt() {
 		if (createdAt == null) {

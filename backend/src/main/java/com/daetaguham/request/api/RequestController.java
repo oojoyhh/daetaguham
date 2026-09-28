@@ -19,9 +19,53 @@ import org.springframework.web.bind.annotation.RestController;
 public class RequestController {
 
 	private final RequestService requestService;
+	private final com.daetaguham.request.application.ApplicationService applicationService;
 
-	public RequestController(RequestService requestService) {
+	public RequestController(
+			RequestService requestService,
+			com.daetaguham.request.application.ApplicationService applicationService
+	) {
 		this.requestService = requestService;
+		this.applicationService = applicationService;
+	}
+
+	@PostMapping("/requests/{requestId}/applications")
+	@ResponseStatus(HttpStatus.CREATED)
+	public ApplicationResponse apply(
+			@AuthenticationPrincipal Jwt jwt,
+			@PathVariable Long requestId,
+			@Valid @RequestBody(required = false) ApplicationWriteRequest request
+	) {
+		ApplicationWriteRequest body = request == null
+				? new ApplicationWriteRequest(null, null)
+				: request;
+		return ApplicationResponse.from(applicationService.apply(
+				Long.valueOf(jwt.getSubject()),
+				requestId,
+				body.offeredShiftIds(),
+				body.message()
+		));
+	}
+
+	@PutMapping("/applications/{applicationId}/withdraw")
+	public ApplicationResponse withdraw(
+			@AuthenticationPrincipal Jwt jwt,
+			@PathVariable Long applicationId
+	) {
+		return ApplicationResponse.from(applicationService.withdraw(
+				Long.valueOf(jwt.getSubject()), applicationId));
+	}
+
+	@PutMapping("/applications/{applicationId}/response")
+	public RequestDetailResponse respond(
+			@AuthenticationPrincipal Jwt jwt,
+			@PathVariable Long applicationId,
+			@Valid @RequestBody ProposalResponseRequest request
+	) {
+		Long actorId = Long.valueOf(jwt.getSubject());
+		Long requestId = applicationService.respondToProposal(
+				actorId, applicationId, request.accept(), request.offerShiftId());
+		return RequestDetailResponse.from(requestService.find(actorId, requestId));
 	}
 
 	@PostMapping("/requests")
@@ -59,6 +103,23 @@ public class RequestController {
 	) {
 		return RequestDetailResponse.from(requestService.cancel(
 				Long.valueOf(jwt.getSubject()), requestId));
+	}
+
+	@PostMapping("/requests/{requestId}/proposals")
+	public RequestDetailResponse retryProposal(
+			@AuthenticationPrincipal Jwt jwt,
+			@PathVariable Long requestId,
+			@Valid @RequestBody ProposalRetryRequest request
+	) {
+		return RequestDetailResponse.from(requestService.retryProposal(
+				Long.valueOf(jwt.getSubject()),
+				requestId,
+				request.targetUserId(),
+				request.targetShiftIds(),
+				request.availableDates(),
+				request.switchToPublic(),
+				request.scope()
+		));
 	}
 
 	@PostMapping("/stores/{storeId}/open-shifts")
