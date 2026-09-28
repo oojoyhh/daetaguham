@@ -52,4 +52,8 @@ public interface ShiftRepository extends JpaRepository<Shift, Long> {
 			@Param("startAt") LocalDateTime startAt,
 			@Param("endAt") LocalDateTime endAt
 	);
+
+	@EntityGraph(attributePaths = {"store", "worker"})
+	List<Shift> findAllByWorker_IdAndStore_IdAndStartAtAfterOrderByStartAtAsc(
+			Long workerId, Long storeId, LocalDateTime after);
 }

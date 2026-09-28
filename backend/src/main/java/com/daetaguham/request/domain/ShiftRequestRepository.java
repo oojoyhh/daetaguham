@@ -56,4 +56,18 @@ public interface ShiftRequestRepository extends JpaRepository<ShiftRequest, Long
 			@Param("statuses") Collection<RequestStatus> statuses,
 			@Param("cutoff") LocalDateTime cutoff
 	);
+
+	long countByRequester_IdAndTypeInAndStatusAndShift_Worker_Id(
+			Long requesterId,
+			Collection<RequestType> types,
+			RequestStatus status,
+			Long workerId
+	);
+
+	long countByTypeAndStatusAndShift_Worker_IdAndConfirmedAtGreaterThanEqual(
+			RequestType type,
+			RequestStatus status,
+			Long workerId,
+			LocalDateTime confirmedAfter
+	);
 }

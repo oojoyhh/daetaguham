@@ -1002,7 +1002,8 @@ paths:
         **추천 방식**
         1. 규칙 필터: 범위 안 ACTIVE 직원 중 시간이 겹치지 않는 사람 (교대는 같은 매장만)
         2. 점수: 근무 가능 시간 일치, 이번 주 근무시간이 적은 순, 나를 도와준 횟수
-        3. AI 설명: 순위별 추천 사유를 한 줄로 생성 (판정은 규칙이 하고, AI는 설명만 담당)
+        3. 설명: 판정과 분리된 생성기가 순위별 추천 사유를 한 줄로 생성
+           (현재는 규칙 기반 fallback, 외부 AI로 교체 가능)
       parameters:
         - $ref: '#/components/parameters/ShiftIdPath'
         - name: type
@@ -2067,7 +2068,7 @@ components:
           example: 3
         aiReason:
           type: string
-          description: AI가 생성한 한 줄 추천 사유
+          description: 설명 생성기가 만든 한 줄 추천 사유 (현재는 규칙 기반 fallback)
           example: 이번 주 근무가 가장 적고, 금요일 종일 가능해요
         shifts:
           type: array

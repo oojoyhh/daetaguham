@@ -1,8 +1,12 @@
 package com.daetaguham.shift.api;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
+import com.daetaguham.request.domain.RequestScope;
+import com.daetaguham.request.domain.RequestType;
+import com.daetaguham.shift.application.CandidateRecommendationService;
 import com.daetaguham.shift.application.ShiftService;
 
 import jakarta.validation.Valid;
@@ -25,9 +29,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class ShiftController {
 
 	private final ShiftService shiftService;
+	private final CandidateRecommendationService candidateRecommendationService;
 
-	public ShiftController(ShiftService shiftService) {
+	public ShiftController(
+			ShiftService shiftService,
+			CandidateRecommendationService candidateRecommendationService
+	) {
 		this.shiftService = shiftService;
+		this.candidateRecommendationService = candidateRecommendationService;
 	}
 
 	@GetMapping("/stores/{storeId}/shift-templates")
@@ -63,6 +72,30 @@ public class ShiftController {
 		return shiftService.findShifts(Long.valueOf(jwt.getSubject()), storeId, from, to).stream()
 				.map(ShiftResponse::from)
 				.toList();
+	}
+
+	@GetMapping("/shifts/{shiftId}/candidates")
+	public CandidateListResponse shiftCandidates(
+			@AuthenticationPrincipal Jwt jwt,
+			@PathVariable Long shiftId,
+			@RequestParam RequestType type,
+			@RequestParam(required = false) RequestScope scope,
+			@RequestParam(defaultValue = "5") int limit
+	) {
+		return CandidateListResponse.from(candidateRecommendationService.findForShift(
+				Long.valueOf(jwt.getSubject()), shiftId, type, scope, limit));
+	}
+
+	@GetMapping("/stores/{storeId}/candidates")
+	public CandidateListResponse openShiftCandidates(
+			@AuthenticationPrincipal Jwt jwt,
+			@PathVariable Long storeId,
+			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startAt,
+			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endAt,
+			@RequestParam RequestScope scope
+	) {
+		return CandidateListResponse.from(candidateRecommendationService.findForOpenShift(
+				Long.valueOf(jwt.getSubject()), storeId, startAt, endAt, scope));
 	}
 
 	@PostMapping("/stores/{storeId}/shifts")
