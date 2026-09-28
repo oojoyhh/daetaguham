@@ -4,6 +4,8 @@ import java.util.Collection;
 import java.util.Optional;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -29,4 +31,11 @@ public interface ShiftRequestRepository extends JpaRepository<ShiftRequest, Long
 
 	@EntityGraph(attributePaths = {"shift", "shift.store", "shift.worker", "requester"})
 	List<ShiftRequest> findAllByShift_IdAndStatusIn(Long shiftId, Collection<RequestStatus> statuses);
+
+	@EntityGraph(attributePaths = {"shift", "shift.store", "shift.store.owner", "shift.worker", "requester"})
+	List<ShiftRequest> findAllByModeAndStatusOrderByCreatedAtDescIdDesc(
+			RequestMode mode, RequestStatus status);
+
+	@EntityGraph(attributePaths = {"shift", "shift.store", "shift.store.owner", "shift.worker", "requester"})
+	Page<ShiftRequest> findAllByRequester_IdOrderByCreatedAtDescIdDesc(Long requesterId, Pageable pageable);
 }

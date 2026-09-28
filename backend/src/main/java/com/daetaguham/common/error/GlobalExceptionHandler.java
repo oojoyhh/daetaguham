@@ -11,6 +11,7 @@ import com.daetaguham.notification.application.InvalidNotificationRequestExcepti
 import com.daetaguham.notification.application.NotificationNotFoundException;
 import com.daetaguham.request.application.ActiveShiftRequestExistsException;
 import com.daetaguham.request.application.InvalidRequestStateException;
+import com.daetaguham.request.application.InvalidRequestQueryException;
 import com.daetaguham.request.application.InvalidShiftRequestException;
 import com.daetaguham.request.application.ShiftRequestForbiddenException;
 import com.daetaguham.request.application.ShiftRequestNotFoundException;
@@ -189,6 +190,11 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(InvalidRequestStateException.class)
 	ResponseEntity<ApiErrorResponse> handleInvalidRequestState(InvalidRequestStateException exception) {
 		return error(HttpStatus.CONFLICT, "INVALID_REQUEST_STATE", exception.getMessage());
+	}
+
+	@ExceptionHandler(InvalidRequestQueryException.class)
+	ResponseEntity<ApiErrorResponse> handleInvalidRequestQuery(InvalidRequestQueryException exception) {
+		return error(HttpStatus.BAD_REQUEST, "INVALID_REQUEST_QUERY", exception.getMessage());
 	}
 
 	@ExceptionHandler(DataIntegrityViolationException.class)

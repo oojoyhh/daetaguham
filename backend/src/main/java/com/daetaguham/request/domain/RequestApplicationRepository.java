@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Collection;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -29,4 +31,42 @@ public interface RequestApplicationRepository extends JpaRepository<RequestAppli
 	@EntityGraph(attributePaths = {"applicant", "request", "request.shift", "request.shift.store"})
 	@Query("select application from RequestApplication application where application.id = :id")
 	Optional<RequestApplication> findDetailedById(@Param("id") Long id);
+
+	@EntityGraph(attributePaths = {
+			"request", "request.requester", "request.shift", "request.shift.store",
+			"request.shift.store.owner", "request.shift.worker"
+	})
+	@Query("""
+			select application
+			from RequestApplication application
+			where application.applicant.id = :applicantId
+			  and application.request.mode = com.daetaguham.request.domain.RequestMode.PUBLIC
+			  and application.status not in :excludedStatuses
+			order by application.createdAt desc, application.id desc
+			""")
+	Page<RequestApplication> findPublicActivities(
+			@Param("applicantId") Long applicantId,
+			@Param("excludedStatuses") Collection<ApplicationStatus> excludedStatuses,
+			Pageable pageable
+	);
+
+	@EntityGraph(attributePaths = {
+			"request", "request.requester", "request.shift", "request.shift.store",
+			"request.shift.store.owner", "request.shift.worker"
+	})
+	@Query("""
+			select application
+			from RequestApplication application
+			where application.applicant.id = :applicantId
+			  and (
+			    application.request.mode = com.daetaguham.request.domain.RequestMode.DIRECT
+			    or application.status in :proposalStatuses
+			  )
+			order by application.createdAt desc, application.id desc
+			""")
+	Page<RequestApplication> findReceivedProposals(
+			@Param("applicantId") Long applicantId,
+			@Param("proposalStatuses") Collection<ApplicationStatus> proposalStatuses,
+			Pageable pageable
+	);
 }

@@ -1,6 +1,8 @@
 package com.daetaguham.request.api;
 
 import com.daetaguham.request.application.RequestService;
+import com.daetaguham.request.application.RequestQueryService;
+import com.daetaguham.request.domain.RequestType;
 
 import jakarta.validation.Valid;
 
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 public class RequestController {
@@ -21,15 +24,41 @@ public class RequestController {
 	private final RequestService requestService;
 	private final com.daetaguham.request.application.ApplicationService applicationService;
 	private final com.daetaguham.request.application.RequestResolutionService resolutionService;
+	private final RequestQueryService requestQueryService;
 
 	public RequestController(
 			RequestService requestService,
 			com.daetaguham.request.application.ApplicationService applicationService,
-			com.daetaguham.request.application.RequestResolutionService resolutionService
+			com.daetaguham.request.application.RequestResolutionService resolutionService,
+			RequestQueryService requestQueryService
 	) {
 		this.requestService = requestService;
 		this.applicationService = applicationService;
 		this.resolutionService = resolutionService;
+		this.requestQueryService = requestQueryService;
+	}
+
+	@GetMapping("/requests")
+	public RequestPageResponse board(
+			@AuthenticationPrincipal Jwt jwt,
+			@RequestParam(required = false) RequestType type,
+			@RequestParam(required = false) Long storeId,
+			@RequestParam(defaultValue = "1") int page,
+			@RequestParam(defaultValue = "10") int size
+	) {
+		return RequestPageResponse.from(requestQueryService.findBoard(
+				Long.valueOf(jwt.getSubject()), type, storeId, page, size));
+	}
+
+	@GetMapping("/me/requests")
+	public RequestPageResponse mine(
+			@AuthenticationPrincipal Jwt jwt,
+			@RequestParam String box,
+			@RequestParam(defaultValue = "1") int page,
+			@RequestParam(defaultValue = "10") int size
+	) {
+		return RequestPageResponse.from(requestQueryService.findMine(
+				Long.valueOf(jwt.getSubject()), box, page, size));
 	}
 
 	@PostMapping("/requests/{requestId}/applications")
