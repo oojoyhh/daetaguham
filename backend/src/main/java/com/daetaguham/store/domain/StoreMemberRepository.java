@@ -18,6 +18,9 @@ public interface StoreMemberRepository extends JpaRepository<StoreMember, Long> 
 	@EntityGraph(attributePaths = "user")
 	List<StoreMember> findAllByStore_IdAndStatusOrderByRequestedAtAsc(Long storeId, MemberStatus status);
 
+	@EntityGraph(attributePaths = {"store", "user"})
+	List<StoreMember> findAllByStatusAndStore_Owner_Id(MemberStatus status, Long ownerId);
+
 	List<StoreMember> findAllByUser_IdAndStatus(Long userId, MemberStatus status);
 
 	@EntityGraph(attributePaths = "store")

@@ -1,7 +1,7 @@
 # 백엔드 개발 체크리스트
 
-> 최종 갱신: 2026-09-23  
-> 현재 DB 구현: 12개 테이블 중 11개 (`users`, `stores`, `store_members`, `shift_templates`, `shifts`, `availabilities`, `store_notices`, `shift_requests`, `request_available_dates`, `request_applications`, `application_offer_shifts`)
+> 최종 갱신: 2026-09-28
+> 현재 DB 구현: 설계된 12개 테이블 전체 (`users`, `stores`, `store_members`, `shift_templates`, `shifts`, `availabilities`, `store_notices`, `shift_requests`, `request_available_dates`, `request_applications`, `application_offer_shifts`, `notifications`)
 
 ## 1. 프로젝트 기반
 
@@ -57,7 +57,7 @@
 - [x] 매장 공개·동일 사장 다른 매장 공개 범위
 - [x] 과거 근무 차단·진행 중 요청 중복 방지·취소 상태 규칙
 - [x] 지정 요청 (`DIRECT`)과 거절 후 재제안·공개 전환
-- [ ] 급구 대상 알림 저장 — 알림 테이블 구현 때 연결
+- [x] 선택한 급구 대상 알림 저장과 실제 알림 수 응답
 
 ## 7. 지원·승인·근무표 반영
 
@@ -71,8 +71,10 @@
 
 ## 8. 알림·추천
 
-- [ ] `notifications` 테이블과 읽음 처리
-- [ ] 요청·지원·승인 상태별 알림 생성
+- [x] `notifications` 테이블과 페이지 조회·개별/전체 읽음 처리
+- [x] 가입 신청·대타·교대·급구·지정 제안·지원·승인·반려·확정 알림 생성
+- [x] 다른 사용자의 알림 조회·읽음 처리 차단
+- [ ] 요청 만료 스케줄러와 `EXPIRED` 알림
 - [ ] 근무 겹침·가능 시간·주간 근무량 기반 후보 필터
 - [ ] 규칙 점수로 순위 산정
 - [ ] AI는 추천 이유 설명만 생성하도록 연결
@@ -88,8 +90,8 @@
 
 ## 다음 작업 순서
 
-1. `notifications` 테이블과 상태별 알림
-2. 요청 게시판·내 활동 목록 조회
+1. 요청 게시판·내 활동 목록 조회
+2. 요청 만료 스케줄러와 만료 알림
 3. 추천 후보 필터·점수와 AI 설명
 4. HTML 화면 API 연결
 5. 통합 테스트·배포

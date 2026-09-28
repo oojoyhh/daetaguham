@@ -7,6 +7,8 @@ import com.daetaguham.shift.application.ShiftNotFoundException;
 import com.daetaguham.shift.application.ShiftReferencedByRequestException;
 import com.daetaguham.shift.application.ShiftTimeConflictException;
 import com.daetaguham.shift.api.ShiftBulkConflictResponse;
+import com.daetaguham.notification.application.InvalidNotificationRequestException;
+import com.daetaguham.notification.application.NotificationNotFoundException;
 import com.daetaguham.request.application.ActiveShiftRequestExistsException;
 import com.daetaguham.request.application.InvalidRequestStateException;
 import com.daetaguham.request.application.InvalidShiftRequestException;
@@ -39,6 +41,16 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+	@ExceptionHandler(InvalidNotificationRequestException.class)
+	ResponseEntity<ApiErrorResponse> handleInvalidNotificationRequest(InvalidNotificationRequestException exception) {
+		return error(HttpStatus.BAD_REQUEST, "INVALID_NOTIFICATION_QUERY", exception.getMessage());
+	}
+
+	@ExceptionHandler(NotificationNotFoundException.class)
+	ResponseEntity<ApiErrorResponse> handleNotificationNotFound(NotificationNotFoundException exception) {
+		return error(HttpStatus.NOT_FOUND, "NOTIFICATION_NOT_FOUND", exception.getMessage());
+	}
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)
 	ResponseEntity<ApiErrorResponse> handleValidation(MethodArgumentNotValidException exception) {

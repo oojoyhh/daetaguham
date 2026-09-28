@@ -8,6 +8,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.daetaguham.notification.application.NotificationService;
 import com.daetaguham.request.domain.RequestAvailableDate;
 import com.daetaguham.request.domain.RequestAvailableDateRepository;
 import com.daetaguham.request.domain.RequestMode;
@@ -47,6 +48,7 @@ public class RequestService {
 	private final StoreMemberRepository storeMemberRepository;
 	private final UserRepository userRepository;
 	private final ApplicationService applicationService;
+	private final NotificationService notificationService;
 
 	public RequestService(
 			ShiftRequestRepository requestRepository,
@@ -55,7 +57,8 @@ public class RequestService {
 			StoreRepository storeRepository,
 			StoreMemberRepository storeMemberRepository,
 			UserRepository userRepository,
-			ApplicationService applicationService
+			ApplicationService applicationService,
+			NotificationService notificationService
 	) {
 		this.requestRepository = requestRepository;
 		this.availableDateRepository = availableDateRepository;
@@ -64,6 +67,7 @@ public class RequestService {
 		this.storeMemberRepository = storeMemberRepository;
 		this.userRepository = userRepository;
 		this.applicationService = applicationService;
+		this.notificationService = notificationService;
 	}
 
 	@Transactional
@@ -114,6 +118,8 @@ public class RequestService {
 				.toList());
 		if (resolvedMode == RequestMode.DIRECT) {
 			applicationService.createProposal(request, targetUserId, targetShiftIds);
+		} else {
+			notificationService.notifyPublicRequest(request, normalizedDates);
 		}
 		return toView(request, normalizedDates, actorId);
 	}
@@ -157,7 +163,8 @@ public class RequestService {
 				owner,
 				normalizedMessage
 		));
-		return new OpenShiftResult(toView(request, List.of(), actorId), 0);
+		int notifiedCount = notificationService.notifyOpenShift(request, notifyUserIds);
+		return new OpenShiftResult(toView(request, List.of(), actorId), notifiedCount);
 	}
 
 	@Transactional(readOnly = true)
@@ -213,6 +220,7 @@ public class RequestService {
 			availableDateRepository.saveAll(dates.stream()
 					.map(date -> RequestAvailableDate.create(request, date))
 					.toList());
+			notificationService.notifyPublicRequest(request, dates);
 			return toView(request, dates, actorId);
 		}
 

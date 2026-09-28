@@ -1,0 +1,13 @@
+package com.daetaguham.notification.domain;
+
+public enum NotificationType {
+	REQUEST_OPENED,
+	OPEN_SHIFT_POSTED,
+	PROPOSAL_RECEIVED,
+	APPLICATION_NEW,
+	APPROVAL_NEEDED,
+	CONFIRMED,
+	REJECTED,
+	EXPIRED,
+	MEMBER_REQUEST
+}

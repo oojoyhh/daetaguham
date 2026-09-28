@@ -182,7 +182,14 @@ class RequestApiIntegrationTest {
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.request.type").value("OPEN_SHIFT"))
 				.andExpect(jsonPath("$.request.shift.workerId").doesNotExist())
-				.andExpect(jsonPath("$.notifiedCount").value(0));
+				.andExpect(jsonPath("$.notifiedCount").value(1));
+
+		mockMvc.perform(get("/me/notifications")
+				.header(HttpHeaders.AUTHORIZATION, bearer(coworker)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.unreadCount").value(1))
+				.andExpect(jsonPath("$.content[0].type").value("OPEN_SHIFT_POSTED"))
+				.andExpect(jsonPath("$.content[0].storeId").value(store.getId()));
 
 		mockMvc.perform(get("/stores/{storeId}/summary", store.getId())
 				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
@@ -233,6 +240,11 @@ class RequestApiIntegrationTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.status").value("OPEN"))
 				.andExpect(jsonPath("$.myApplication.status").value("DECLINED"));
+
+		mockMvc.perform(get("/me/notifications")
+				.header(HttpHeaders.AUTHORIZATION, bearer(worker)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.content[0].type").value("REJECTED"));
 
 		mockMvc.perform(post("/requests/{requestId}/proposals", requestId)
 				.header(HttpHeaders.AUTHORIZATION, bearer(worker))
@@ -353,6 +365,11 @@ class RequestApiIntegrationTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.status").value("PENDING_APPROVAL"));
 
+		mockMvc.perform(get("/me/notifications")
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.content[0].type").value("APPROVAL_NEEDED"));
+
 		mockMvc.perform(get("/stores/{storeId}/approvals", store.getId())
 				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
 				.andExpect(status().isOk())
@@ -374,6 +391,11 @@ class RequestApiIntegrationTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.applications[0].status").value("SELECTED"))
 				.andExpect(jsonPath("$.applications[1].status").value("NOT_SELECTED"));
+
+		mockMvc.perform(get("/me/notifications")
+				.header(HttpHeaders.AUTHORIZATION, bearer(coworker)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.content[0].type").value("CONFIRMED"));
 	}
 
 	@Test

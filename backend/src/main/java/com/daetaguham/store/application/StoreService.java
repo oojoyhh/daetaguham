@@ -3,6 +3,7 @@ package com.daetaguham.store.application;
 import java.time.LocalTime;
 import java.util.List;
 
+import com.daetaguham.notification.application.NotificationService;
 import com.daetaguham.shift.domain.ShiftTemplate;
 import com.daetaguham.shift.domain.ShiftTemplateRepository;
 import com.daetaguham.store.domain.MemberStatus;
@@ -28,19 +29,22 @@ public class StoreService {
 	private final StoreMemberRepository storeMemberRepository;
 	private final ShiftTemplateRepository shiftTemplateRepository;
 	private final InviteCodeGenerator inviteCodeGenerator;
+	private final NotificationService notificationService;
 
 	public StoreService(
 			UserRepository userRepository,
 			StoreRepository storeRepository,
 			StoreMemberRepository storeMemberRepository,
 			ShiftTemplateRepository shiftTemplateRepository,
-			InviteCodeGenerator inviteCodeGenerator
+			InviteCodeGenerator inviteCodeGenerator,
+			NotificationService notificationService
 	) {
 		this.userRepository = userRepository;
 		this.storeRepository = storeRepository;
 		this.storeMemberRepository = storeMemberRepository;
 		this.shiftTemplateRepository = shiftTemplateRepository;
 		this.inviteCodeGenerator = inviteCodeGenerator;
+		this.notificationService = notificationService;
 	}
 
 	@Transactional
@@ -74,13 +78,15 @@ public class StoreService {
 		StoreMember membership = storeMemberRepository.findByStore_IdAndUser_Id(store.getId(), userId)
 				.orElse(null);
 		if (membership == null) {
-			return storeMemberRepository.save(StoreMember.request(store, user));
-		}
-		if (membership.getStatus() == MemberStatus.PENDING || membership.getStatus() == MemberStatus.ACTIVE) {
+			membership = storeMemberRepository.save(StoreMember.request(store, user));
+		} else if (membership.getStatus() == MemberStatus.PENDING
+				|| membership.getStatus() == MemberStatus.ACTIVE) {
 			throw new ExistingMembershipException();
+		} else {
+			membership.reapply();
 		}
 
-		membership.reapply();
+		notificationService.notifyMemberRequest(store, user);
 		return membership;
 	}
 

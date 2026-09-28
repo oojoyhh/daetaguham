@@ -10,6 +10,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.daetaguham.notification.application.NotificationService;
 import com.daetaguham.request.domain.ApplicationOfferShift;
 import com.daetaguham.request.domain.ApplicationOfferShiftRepository;
 import com.daetaguham.request.domain.ApplicationStatus;
@@ -45,6 +46,7 @@ public class ApplicationService {
 	private final ShiftRepository shiftRepository;
 	private final StoreMemberRepository storeMemberRepository;
 	private final UserRepository userRepository;
+	private final NotificationService notificationService;
 
 	public ApplicationService(
 			ShiftRequestRepository requestRepository,
@@ -53,7 +55,8 @@ public class ApplicationService {
 			RequestAvailableDateRepository availableDateRepository,
 			ShiftRepository shiftRepository,
 			StoreMemberRepository storeMemberRepository,
-			UserRepository userRepository
+			UserRepository userRepository,
+			NotificationService notificationService
 	) {
 		this.requestRepository = requestRepository;
 		this.applicationRepository = applicationRepository;
@@ -62,6 +65,7 @@ public class ApplicationService {
 		this.shiftRepository = shiftRepository;
 		this.storeMemberRepository = storeMemberRepository;
 		this.userRepository = userRepository;
+		this.notificationService = notificationService;
 	}
 
 	@Transactional
@@ -88,6 +92,7 @@ public class ApplicationService {
 		List<Shift> offeredShifts = validateOfferedShifts(request, target.getId(), targetShiftIds, true);
 		RequestApplication application = applicationRepository.save(RequestApplication.proposed(request, target));
 		saveOffers(application, offeredShifts);
+		notificationService.notifyProposalReceived(request, target);
 		return application;
 	}
 
@@ -125,6 +130,7 @@ public class ApplicationService {
 				.orElseGet(() -> applicationRepository.save(
 						RequestApplication.applied(request, applicant, normalizedMessage)));
 		saveOffers(application, offeredShifts);
+		notificationService.notifyApplicationNew(request, applicant);
 		return toView(application);
 	}
 
@@ -160,11 +166,13 @@ public class ApplicationService {
 		try {
 			if (!accept) {
 				application.decline();
+				notificationService.notifyProposalDeclined(request, application.getApplicant());
 				return request.getId();
 			}
 			Shift selected = validateProposalAcceptance(application, offerShiftId);
 			application.select(selected);
 			request.markPendingApproval();
+			notificationService.notifyApprovalNeeded(request);
 			return request.getId();
 		} catch (IllegalStateException exception) {
 			throw new InvalidRequestStateException(exception.getMessage());

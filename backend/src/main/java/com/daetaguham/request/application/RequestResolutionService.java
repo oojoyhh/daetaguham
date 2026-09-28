@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
 
+import com.daetaguham.notification.application.NotificationService;
 import com.daetaguham.request.domain.ApplicationOfferShift;
 import com.daetaguham.request.domain.ApplicationOfferShiftRepository;
 import com.daetaguham.request.domain.ApplicationStatus;
@@ -45,6 +46,7 @@ public class RequestResolutionService {
 	private final StoreMemberRepository storeMemberRepository;
 	private final UserRepository userRepository;
 	private final StoreRepository storeRepository;
+	private final NotificationService notificationService;
 
 	public RequestResolutionService(
 			ShiftRequestRepository requestRepository,
@@ -53,7 +55,8 @@ public class RequestResolutionService {
 			ShiftRepository shiftRepository,
 			StoreMemberRepository storeMemberRepository,
 			UserRepository userRepository,
-			StoreRepository storeRepository
+			StoreRepository storeRepository,
+			NotificationService notificationService
 	) {
 		this.requestRepository = requestRepository;
 		this.applicationRepository = applicationRepository;
@@ -62,6 +65,7 @@ public class RequestResolutionService {
 		this.storeMemberRepository = storeMemberRepository;
 		this.userRepository = userRepository;
 		this.storeRepository = storeRepository;
+		this.notificationService = notificationService;
 	}
 
 	@Transactional
@@ -90,6 +94,7 @@ public class RequestResolutionService {
 			confirm(request, application);
 		} else {
 			request.markPendingApproval();
+			notificationService.notifyApprovalNeeded(request);
 		}
 		return requestId;
 	}
@@ -115,6 +120,8 @@ public class RequestResolutionService {
 			String normalizedComment = normalizeRejectComment(comment);
 			selected.reject(decider, normalizedComment);
 			request.reopenAfterRejection();
+			notificationService.notifyApprovalRejected(
+					request, selected.getApplicant(), normalizedComment);
 			return requestId;
 		}
 		if (decision != ApprovalDecision.APPROVE) {
@@ -185,6 +192,7 @@ public class RequestResolutionService {
 				application.markNotSelected();
 			}
 		}
+		notificationService.notifyConfirmed(request, applicant);
 	}
 
 	private Shift resolveOfferShift(
