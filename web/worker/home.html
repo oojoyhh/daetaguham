@@ -88,12 +88,14 @@
         </div>
         <div class="cal-grid" id="calGrid"></div>
         <div class="legend">
-          <span><i style="background:var(--store-a)"></i>성수점</span>
-          <span><i style="background:var(--store-b)"></i>건대점(헬퍼)</span>
+          <span><i style="background:var(--store-a)"></i>내 매장</span>
+          <span><i style="background:var(--store-b)"></i>헬퍼 근무</span>
           <span><i style="background:transparent;border:1.5px solid var(--accent)"></i>요청 진행</span>
         </div>
         <span class="api-tag" style="margin-top:8px">GET /me/shifts?from&amp;to</span>
       </section>
+
+      <div class="notice gray" id="scheduleState" role="status" hidden></div>
 
       <!-- 선택한 날 -->
       <h2 class="section-title" id="dayTitle"></h2>
@@ -135,11 +137,14 @@
 
   <script src="../js/common.js?v=2"></script>
   <script>
-    const TODAY = "2026-09-15";
+    const LIVE_MODE = DaetaguhamApi.isSignedIn();
+    const localISO = (date) => toISO(date.getFullYear(), date.getMonth() + 1, date.getDate());
+    const now = new Date();
+    const TODAY = LIVE_MODE ? localISO(now) : "2026-09-15";
     const STORES = { A: { name: "성수점", cls: "a" }, B: { name: "건대점", cls: "b" } };
 
     // 예시 데이터 (GET /me/shifts 응답이라고 가정)
-    const shifts = [
+    const SAMPLE_SHIFTS = [
       { id: 101, date: "2026-09-02", store: "B", start: "14:00", end: "22:00", memo: "마감" },
       { id: 102, date: "2026-09-04", store: "B", start: "10:00", end: "14:00", memo: "오픈" },
       { id: 103, date: "2026-09-06", store: "A", start: "12:00", end: "18:00", memo: "미들", from: "급구" },
@@ -153,25 +158,82 @@
       { id: 111, date: "2026-09-25", store: "A", start: "12:00", end: "20:00", memo: "미들" },
       { id: 112, date: "2026-09-27", store: "B", start: "10:00", end: "16:00", memo: "오픈" },
       { id: 113, date: "2026-09-30", store: "B", start: "14:00", end: "22:00", memo: "마감" },
-    ];
+    ].map((shift) => ({
+      ...shift,
+      storeName: STORES[shift.store].name,
+      isHelper: shift.store === "A",
+      status: shift.date < TODAY ? "DONE" : "UPCOMING",
+    }));
+    let shifts = LIVE_MODE ? [] : SAMPLE_SHIFTS;
     const savedRequests = window.getDemoWorkerRequests ? window.getDemoWorkerRequests() : [];
-    savedRequests.filter((r) => r.status === "OPEN").forEach((request) => {
+    if (!LIVE_MODE) savedRequests.filter((r) => r.status === "OPEN").forEach((request) => {
       const target = shifts.find((s) => s.id === request.shiftId);
       if (target) target.request = { type: request.type, applicants: request.applicants || 0 };
     });
-    if (params.get("date") && params.get("requestType")) {
+    if (!LIVE_MODE && params.get("date") && params.get("requestType")) {
       const target = shifts.find((s) => s.date === params.get("date"));
       if (target) target.request = { type: params.get("requestType"), applicants: 0 };
     }
-    let view = { y: 2026, m: 9 };
-    let selected = params.get("date") || "2026-09-19";
+    let view = LIVE_MODE ? { y: now.getFullYear(), m: now.getMonth() + 1 } : { y: 2026, m: 9 };
+    let selected = params.get("date") || (LIVE_MODE ? TODAY : "2026-09-19");
+
+    const normalizeShift = (shift) => ({
+      id: shift.id,
+      date: shift.startAt.slice(0, 10),
+      start: shift.startAt.slice(11, 16),
+      end: shift.endAt.slice(11, 16),
+      memo: shift.position || "근무",
+      storeName: shift.storeName,
+      isHelper: shift.isHelper,
+      status: shift.status,
+      request: shift.openRequest,
+    });
+
+    const monthQueryRange = ({ y, m }) => {
+      const from = toISO(y, m, 1);
+      const throughNextMonth = new Date(y, m + 1, 0);
+      return { from, to: localISO(throughNextMonth) };
+    };
+
+    async function loadLiveShifts() {
+      const state = document.getElementById("scheduleState");
+      const range = monthQueryRange(view);
+      state.hidden = false;
+      state.textContent = "근무를 불러오는 중이에요…";
+      document.getElementById("prev").disabled = true;
+      document.getElementById("next").disabled = true;
+      try {
+        const result = await DaetaguhamApi.request(
+          `/me/shifts?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`
+        );
+        shifts = result.map(normalizeShift);
+        state.hidden = true;
+      } catch (error) {
+        shifts = [];
+        state.innerHTML = `${window.escapeHTML(error.message)} <button class="btn btn-sm" type="button" id="retrySchedule">다시 시도</button>`;
+      } finally {
+        document.getElementById("prev").disabled = false;
+        document.getElementById("next").disabled = false;
+        renderNext();
+        renderCalendar();
+        renderDay();
+      }
+    }
 
     function renderNext() {
-      const n = shifts.filter((s) => s.date > TODAY).sort((a, b) => a.date.localeCompare(b.date))[0];
+      const n = shifts.filter((s) => s.status !== "DONE" && s.date >= TODAY)
+        .sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start))[0];
+      if (!n) {
+        document.getElementById("nextShift").innerHTML = `
+          <span class="muted">다음 근무</span>
+          <p class="when">예정된 근무가 없어요</p>
+          <p class="muted">새 근무가 배정되면 여기에 보여줄게요.</p>`;
+        return;
+      }
       document.getElementById("nextShift").innerHTML = `
         <div class="row between"><span class="muted">다음 근무</span><span class="dday">D-${daysBetween(TODAY, n.date)}</span></div>
         <p class="when num">${fmtDate(n.date)} ${n.start}–${n.end}</p>
-        <p class="muted">${STORES[n.store].name} · ${n.memo}</p>`;
+        <p class="muted">${window.escapeHTML(n.storeName)} · ${window.escapeHTML(n.memo)}</p>`;
     }
 
     function renderCalendar() {
@@ -187,7 +249,7 @@
         const inMonth = dt.getMonth() + 1 === m;
         const iso = toISO(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
         const list = shifts.filter((s) => s.date === iso);
-        const dots = list.map((s) => `<i class="${s.request ? "req" : s.store === "A" ? "b" : ""}"></i>`).join("");
+        const dots = list.map((s) => `<i class="${s.request ? "req" : s.isHelper ? "b" : ""}"></i>`).join("");
         const cls = ["day", inMonth ? "" : "other", iso === TODAY ? "today" : "", iso === selected ? "sel" : ""].join(" ");
         html += inMonth
           ? `<button type="button" class="${cls}" data-date="${iso}" aria-label="${fmtDate(iso)} 근무 ${list.length}개" aria-pressed="${iso === selected}">
@@ -204,8 +266,7 @@
       if (!list.length) { box.innerHTML = `<div class="card empty">근무가 없는 날이에요</div>`; return; }
 
       box.innerHTML = list.map((s) => {
-        const st = STORES[s.store];
-        const past = s.date < TODAY;
+        const past = s.status === "DONE" || s.date < TODAY;
         let progress = "";
         let action;
         if (past) {
@@ -225,7 +286,7 @@
         return `
           <article class="card shift stack" style="gap:14px">
             <div class="row between">
-              <span class="shift-store">${st.name}${s.store === "A" ? " · 헬퍼" : ""}</span>
+              <span class="shift-store">${window.escapeHTML(s.storeName)}${s.isHelper ? " · 헬퍼" : ""}</span>
               ${s.from ? `<span class="pill ok">${s.from}로 들어온 근무</span>` : ""}
             </div>
             <div>
@@ -245,8 +306,21 @@
       renderCalendar();
       renderDay();
     });
-    document.getElementById("prev").addEventListener("click", () => { view.m -= 1; if (view.m < 1) { view.m = 12; view.y -= 1; } renderCalendar(); });
-    document.getElementById("next").addEventListener("click", () => { view.m += 1; if (view.m > 12) { view.m = 1; view.y += 1; } renderCalendar(); });
+    document.getElementById("prev").addEventListener("click", async () => {
+      view.m -= 1;
+      if (view.m < 1) { view.m = 12; view.y -= 1; }
+      selected = toISO(view.y, view.m, 1);
+      if (LIVE_MODE) await loadLiveShifts(); else { renderCalendar(); renderDay(); }
+    });
+    document.getElementById("next").addEventListener("click", async () => {
+      view.m += 1;
+      if (view.m > 12) { view.m = 1; view.y += 1; }
+      selected = toISO(view.y, view.m, 1);
+      if (LIVE_MODE) await loadLiveShifts(); else { renderCalendar(); renderDay(); }
+    });
+    document.getElementById("scheduleState").addEventListener("click", (event) => {
+      if (event.target.id === "retrySchedule") loadLiveShifts();
+    });
 
     const sheet = document.getElementById("proposalSheet");
     document.getElementById("proposalBanner").addEventListener("click", () => sheet.showModal());
@@ -270,9 +344,14 @@
         : "교대 제안을 거절했어요");
     });
 
-    renderNext();
-    renderCalendar();
-    renderDay();
+    if (LIVE_MODE) {
+      document.getElementById("proposalBanner").hidden = true;
+      loadLiveShifts();
+    } else {
+      renderNext();
+      renderCalendar();
+      renderDay();
+    }
   </script>
 </body>
 </html>
