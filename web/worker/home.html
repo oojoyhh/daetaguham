@@ -71,8 +71,8 @@
     <main class="content">
       <!-- 나에게 온 제안 -->
       <button class="proposal-banner" type="button" id="proposalBanner">
-        <span class="avatar" style="background:#fff">민혁</span>
-        <span class="grow">배민혁님이 교대를 제안했어요<small>9/22(화) 근무 ⇄ 내 근무 2개 중 선택</small></span>
+        <span class="avatar" id="proposalAvatar" style="background:#fff">민혁</span>
+        <span class="grow" id="proposalTitle">배민혁님이 교대를 제안했어요<small id="proposalSummary">9/22(화) 근무 ⇄ 내 근무 2개 중 선택</small></span>
         <span aria-hidden="true">›</span>
       </button>
 
@@ -109,17 +109,17 @@
   <dialog class="sheet" id="proposalSheet">
     <form method="dialog">
       <div class="sheet-body">
-        <h3>배민혁님의 교대 제안</h3>
-        <div class="swap">
+        <h3 id="proposalSheetTitle">배민혁님의 교대 제안</h3>
+        <div class="swap" id="proposalSwap">
           <div><small>배민혁님 근무 (내가 대신)</small><b class="num">9/22(화) 14–22</b></div>
           <span class="muted" aria-hidden="true">⇄</span>
           <div><small>내 근무 (배민혁님이 대신)</small><b class="num" id="pickedMine">아래에서 선택</b></div>
         </div>
-        <div class="say">
+        <div class="say" id="proposalMessage">
           <span class="avatar">민혁</span>
-          <div><small>배민혁님이 남긴 말</small><p>화요일에 학교 일정이 생겼어요. 제 화요일이랑 바꿔줄 수 있을까요?</p></div>
+          <div><small id="proposalMessageLabel">배민혁님이 남긴 말</small><p id="proposalMessageText">화요일에 학교 일정이 생겼어요. 제 화요일이랑 바꿔줄 수 있을까요?</p></div>
         </div>
-        <p class="help">배민혁님이 대신할 수 있는 내 근무예요. 하나를 골라주세요.</p>
+        <p class="help" id="proposalHelp">배민혁님이 대신할 수 있는 내 근무예요. 하나를 골라주세요.</p>
         <div class="choices" id="mineChoices" role="radiogroup" aria-label="바꿀 내 근무">
           <label class="choice"><input type="radio" name="mine" value="110" data-label="9/23(수) 14–22"><span><b class="num">9/23(수) 14:00–22:00</b><small>건대점 마감</small></span></label>
           <label class="choice"><input type="radio" name="mine" value="113" data-label="9/30(수) 14–22"><span><b class="num">9/30(수) 14:00–22:00</b><small>건대점 마감</small></span></label>
@@ -323,6 +323,7 @@
     });
 
     const sheet = document.getElementById("proposalSheet");
+    let liveProposal = null;
     document.getElementById("proposalBanner").addEventListener("click", () => sheet.showModal());
     document.getElementById("mineChoices").addEventListener("change", (e) => {
       document.getElementById("pickedMine").textContent = e.target.dataset.label;
@@ -330,23 +331,81 @@
     });
     // 지정 교대 수락은 바꿀 내 근무를 하나 골라야 함
     document.getElementById("acceptBtn").addEventListener("click", (e) => {
-      if (!document.querySelector('input[name="mine"]:checked')) {
+      if ((!LIVE_MODE || liveProposal?.type === "EXCHANGE") && !document.querySelector('input[name="mine"]:checked')) {
         e.preventDefault();
         document.getElementById("mineError").hidden = false;
       }
     });
-    sheet.addEventListener("close", () => {
+    sheet.addEventListener("close", async () => {
       if (!sheet.returnValue || sheet.returnValue === "") return;
-      document.getElementById("proposalBanner").hidden = true;
       const picked = document.querySelector('input[name="mine"]:checked');
+      if (LIVE_MODE && liveProposal) {
+        try {
+          await DaetaguhamApi.request(`/applications/${liveProposal.myApplication.id}/response`, {
+            method: "PUT",
+            body: { accept: sheet.returnValue === "accept", offerShiftId: sheet.returnValue === "accept" && picked ? Number(picked.value) : null },
+          });
+          document.getElementById("proposalBanner").hidden = true;
+          toast(sheet.returnValue === "accept" ? "제안을 수락했어요. 매장 승인을 기다려요" : "제안을 거절했어요");
+        } catch (error) {
+          toast(error.message);
+        }
+        return;
+      }
+      document.getElementById("proposalBanner").hidden = true;
       toast(sheet.returnValue === "accept"
         ? `${picked.dataset.label} 근무로 수락했어요. 점장님 승인을 기다려요`
         : "교대 제안을 거절했어요");
     });
 
+    async function loadLiveProposal() {
+      const banner = document.getElementById("proposalBanner");
+      banner.hidden = true;
+      try {
+        const received = await DaetaguhamApi.request("/me/requests?box=received&page=1&size=10");
+        const summary = received.content.find((item) => item.myApplicationStatus === "PROPOSED");
+        if (!summary) return;
+        liveProposal = await DaetaguhamApi.request(`/requests/${summary.id}`);
+        const application = liveProposal.myApplication;
+        const requester = liveProposal.requesterName;
+        const type = liveProposal.type === "EXCHANGE" ? "교대" : "대타";
+        const original = liveProposal.shift;
+        const originalLabel = `${fmtDate(original.startAt.slice(0, 10))} ${original.startAt.slice(11, 16)}–${original.endAt.slice(11, 16)}`;
+        document.getElementById("proposalAvatar").textContent = shortName(requester);
+        document.getElementById("proposalTitle").firstChild.textContent = `${requester}님이 ${type}를 제안했어요`;
+        document.getElementById("proposalSummary").textContent = liveProposal.type === "EXCHANGE"
+          ? `${originalLabel} ⇄ 내 근무 ${(application.offeredShifts || []).length}개 중 선택`
+          : `${originalLabel} 근무를 대신해 달라는 부탁이에요`;
+        document.getElementById("proposalSheetTitle").textContent = `${requester}님의 ${type} 제안`;
+        document.getElementById("proposalMessageLabel").textContent = `${requester}님의 요청 사유`;
+        document.getElementById("proposalMessageText").textContent = liveProposal.reason || "개인 사정";
+        document.querySelector("#proposalMessage .avatar").textContent = shortName(requester);
+
+        const exchange = liveProposal.type === "EXCHANGE";
+        document.getElementById("proposalSwap").hidden = !exchange;
+        document.getElementById("proposalHelp").hidden = !exchange;
+        document.getElementById("mineChoices").hidden = !exchange;
+        document.getElementById("mineError").hidden = true;
+        document.getElementById("acceptBtn").textContent = exchange ? "교대 수락" : "대타 수락";
+        if (exchange) {
+          document.querySelector("#proposalSwap > div:first-child small").textContent = `${requester}님 근무 (내가 대신)`;
+          document.querySelector("#proposalSwap > div:first-child b").textContent = originalLabel;
+          document.getElementById("proposalHelp").textContent = `${requester}님이 대신할 수 있는 내 근무예요. 하나를 골라주세요.`;
+          document.getElementById("mineChoices").innerHTML = (application.offeredShifts || []).map((offer) => {
+            const label = `${fmtDate(offer.startAt.slice(0, 10))} ${offer.startAt.slice(11, 16)}–${offer.endAt.slice(11, 16)}`;
+            return `<label class="choice"><input type="radio" name="mine" value="${offer.id}" data-label="${escapeHTML(label)}"><span><b class="num">${escapeHTML(label)}</b><small>${escapeHTML(liveProposal.storeName)} ${escapeHTML(offer.position || "근무")}</small></span></label>`;
+          }).join("");
+        }
+        banner.hidden = false;
+      } catch (error) {
+        console.warn("받은 제안을 불러오지 못했어요.", error);
+      }
+    }
+
     if (LIVE_MODE) {
       document.getElementById("proposalBanner").hidden = true;
       loadLiveShifts();
+      loadLiveProposal();
     } else {
       renderNext();
       renderCalendar();

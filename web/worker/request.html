@@ -104,10 +104,9 @@
 
   <script src="../js/common.js"></script>
   <script>
-    // 예시 데이터: gave = 이 사람이 나를 대타해준 횟수, got = 내가 이 사람을 대타해준 횟수
-    // ?type=EXCHANGE 면 내가 올린 공개 교대 요청 예시 (지원자가 내놓은 근무 offers 중 하나를 골라 확정)
-    const isEx = params.get("type") === "EXCHANGE";
-    const applicants = isEx ? [
+    const LIVE_MODE = DaetaguhamApi.isSignedIn();
+    let isEx = params.get("type") === "EXCHANGE";
+    let applicants = isEx ? [
       { id: "minhyeok", name: "배민혁", gave: 3, got: 1, week: 12, appliedAt: "14:05",
         offers: [{ id: 201, label: "9/22(화) 14:00–22:00 마감" }] },
       { id: "yeri", name: "권예리", gave: 1, got: 2, week: 18, appliedAt: "13:10",
@@ -120,21 +119,41 @@
       { id: "suyeon", name: "인수연", gave: 0, got: 0, week: 6, appliedAt: "11:32" },
     ];
     let chosenOffer = null;
-
-    if (isEx) {
-      document.title = "교대 요청 | 알바생";
-      document.getElementById("pageTitle").textContent = "교대 요청";
-      document.getElementById("reqDate").textContent = "9/23(수)";
-      document.getElementById("reqTime").textContent = "14:00–22:00 · 건대점 마감";
-      document.getElementById("reqInfo").innerHTML = `
-        <dt>공개</dt><dd>건대점 직원 중 날짜가 맞는 사람</dd>
-        <dt>대신 가능</dt><dd class="num">9/22(화) · 9/26(토) · 10/1(목)</dd>
-        <dt>승인</dt><dd>점장님 승인 후 확정</dd>`;
-    }
-
-    let status = "OPEN";   // OPEN → PENDING / CANCELED
-    if (isEx) document.getElementById("cancelDesc").textContent = "지원자에게 취소됐다고 알려드려요. 9/23 근무는 그대로 한석휘님이 해요.";
+    let status = "OPEN";
     let chosen = null;
+    let requestDetail = null;
+
+    const shiftLabel = (shift) => `${fmtDate(shift.startAt.slice(0, 10))} ${shift.startAt.slice(11, 16)}–${shift.endAt.slice(11, 16)} ${shift.position || "근무"}`;
+    const scopeLabel = (scope, mode) => mode === "DIRECT" ? "한 명에게 부탁" : scope === "OWNER_STORES" ? "사장님 매장 전체" : "같은 매장 직원";
+    const renderSummary = (detail) => {
+      const shift = detail.shift;
+      const date = shift.startAt.slice(0, 10);
+      isEx = detail.type === "EXCHANGE";
+      document.title = `${isEx ? "교대" : "대타"} 요청 | 알바생`;
+      document.getElementById("pageTitle").textContent = `${isEx ? "교대" : "대타"} 요청`;
+      document.getElementById("reqDate").textContent = fmtDate(date);
+      document.getElementById("reqTime").textContent = `${shift.startAt.slice(11, 16)}–${shift.endAt.slice(11, 16)} · ${escapeHTML(detail.storeName)} ${escapeHTML(shift.position || "근무")}`;
+      const rows = [
+        ["공개", scopeLabel(detail.scope, detail.mode)],
+        ...(isEx && detail.availableDates.length ? [["대신 가능", detail.availableDates.map(fmtDate).join(" · ")]] : []),
+        ["승인", detail.approvalRequired ? "점장·사장 승인 후 확정" : "선택하면 바로 확정"],
+        ["사유", detail.reason || "개인 사정"],
+      ];
+      document.getElementById("reqInfo").innerHTML = rows.map(([key, value]) => `<dt>${key}</dt><dd>${escapeHTML(value)}</dd>`).join("");
+      document.getElementById("cancelDesc").textContent = `지원자에게 취소됐다고 알려드려요. ${fmtDate(date)} 근무는 그대로 유지돼요.`;
+    };
+
+    const normalizeApplicant = (item) => ({
+      id: item.id,
+      name: item.applicantName,
+      gave: item.giveTake?.gaveToMe || 0,
+      got: item.giveTake?.gotFromMe || 0,
+      week: item.weekHours,
+      appliedAt: item.createdAt ? item.createdAt.slice(11, 16) : "—",
+      status: item.status,
+      offers: (item.offeredShifts || []).map((shift) => ({ id: shift.id, label: shiftLabel(shift) })),
+      selectedOffer: item.selectedOfferShift ? { id: item.selectedOfferShift.id, label: shiftLabel(item.selectedOfferShift) } : null,
+    });
 
     function helpLine(a) {
       if (!a.gave && !a.got) return "아직 주고받은 대타가 없어요";
@@ -149,36 +168,61 @@
       if (status === "OPEN") {
         pill.className = "pill open"; pill.textContent = "모집 중";
         notice.hidden = true;
-      } else if (status === "PENDING") {
+      } else if (status === "PENDING_APPROVAL") {
         pill.className = "pill wait"; pill.textContent = "승인 대기";
         notice.hidden = false; notice.className = "notice";
         notice.textContent = isEx
-          ? `${chosen.name}님의 ${chosenOffer.label} 근무와 바꾸기로 했어요. 점장님 승인을 기다리는 중이에요.`
+          ? `${chosen.name}님의 ${chosenOffer?.label || "선택한"} 근무와 바꾸기로 했어요. 매장 승인을 기다리는 중이에요.`
           : `${chosen.name}님을 선택했어요. 점장님 승인을 기다리는 중이에요.`;
+      } else if (status === "CONFIRMED") {
+        pill.className = "pill ok"; pill.textContent = "확정";
+        notice.hidden = false; notice.className = "notice ok";
+        notice.textContent = "근무 변경이 확정되어 근무표에 반영됐어요.";
       } else {
-        pill.className = "pill"; pill.textContent = "취소됨";
+        pill.className = "pill"; pill.textContent = status === "EXPIRED" ? "마감" : "취소됨";
         notice.hidden = false; notice.className = "notice gray";
-        notice.textContent = "요청을 취소했어요.";
+        notice.textContent = status === "EXPIRED" ? "근무 시작 시간이 지나 요청이 마감됐어요." : "요청을 취소했어요.";
       }
-      cancelBtn.hidden = status === "CANCELED";
+      cancelBtn.hidden = !["OPEN", "PENDING_APPROVAL"].includes(status);
 
-      const list = status === "PENDING" ? [chosen] : applicants;
-      document.getElementById("listTitle").innerHTML = status === "PENDING"
+      const list = status === "PENDING_APPROVAL" || status === "CONFIRMED" ? (chosen ? [chosen] : []) : applicants.filter((item) => item.status === "APPLIED");
+      document.getElementById("listTitle").innerHTML = status === "PENDING_APPROVAL" || status === "CONFIRMED"
         ? "선택한 사람"
-        : `지원한 사람 <small>최근 신청순 · ${applicants.length}명</small>`;
+        : `지원한 사람 <small>최근 신청순 · ${list.length}명</small>`;
 
-      document.getElementById("applicants").innerHTML = list.map((a) => `
+      document.getElementById("applicants").innerHTML = list.length ? list.map((a) => `
         <div class="applicant">
           <span class="avatar">${shortName(a.name)}</span>
           <div class="grow">
-            <p class="name">${a.name}</p>
+            <p class="name">${escapeHTML(a.name)}</p>
             <div class="application-meta num"><div><small>신청 시간</small><strong>${a.appliedAt}</strong></div><div><small>이번 주 근무</small><strong>${a.week}시간</strong></div></div>
-            ${isEx ? `<div class="offer-chips">${(status === "PENDING" ? [chosenOffer] : a.offers).map((o) => `<span class="num">${o.label}</span>`).join("")}</div>` : ""}
+            ${isEx ? `<div class="offer-chips">${((status === "PENDING_APPROVAL" || status === "CONFIRMED") && chosenOffer ? [chosenOffer] : a.offers).map((o) => `<span class="num">${escapeHTML(o.label)}</span>`).join("")}</div>` : ""}
             <p class="help-line">${helpLine(a)}</p>
           </div>
           ${status === "OPEN" ? `<button class="btn btn-sm btn-primary" type="button" data-id="${a.id}">선택</button>` : ""}
-          ${status === "PENDING" ? `<span class="pill ok">선택함</span>` : ""}
-        </div>`).join("");
+          ${status === "PENDING_APPROVAL" || status === "CONFIRMED" ? `<span class="pill ok">선택함</span>` : ""}
+        </div>`).join("") : '<div class="empty">아직 지원한 사람이 없어요.</div>';
+    }
+
+    async function loadRequest() {
+      const id = params.get("id");
+      if (!id) {
+        document.getElementById("applicants").innerHTML = '<div class="empty">요청 번호가 없어요.</div>';
+        return;
+      }
+      document.getElementById("applicants").innerHTML = '<div class="empty">요청을 불러오는 중이에요…</div>';
+      try {
+        requestDetail = await DaetaguhamApi.request(`/requests/${id}`);
+        status = requestDetail.status;
+        applicants = requestDetail.applications.map(normalizeApplicant);
+        chosen = applicants.find((item) => item.status === "SELECTED") || null;
+        chosenOffer = chosen?.selectedOffer || null;
+        renderSummary(requestDetail);
+        render();
+      } catch (error) {
+        document.getElementById("applicants").innerHTML = `<div class="empty">${escapeHTML(error.message)}</div>`;
+        document.getElementById("cancelBtn").hidden = true;
+      }
     }
 
     const selectSheet = document.getElementById("selectSheet");
@@ -188,7 +232,7 @@
     document.getElementById("applicants").addEventListener("click", (e) => {
       const b = e.target.closest("[data-id]");
       if (!b) return;
-      pending = applicants.find((a) => a.id === b.dataset.id);
+      pending = applicants.find((a) => String(a.id) === b.dataset.id);
       document.getElementById("selectTitle").textContent = isEx ? `${pending.name}님과 교대할까요?` : `${pending.name}님에게 맡길까요?`;
       document.getElementById("offerPick").hidden = !isEx;
       document.getElementById("offerError").hidden = true;
@@ -207,24 +251,70 @@
       }
     });
 
-    selectSheet.addEventListener("close", () => {
+    selectSheet.addEventListener("close", async () => {
       if (selectSheet.returnValue !== "yes") return;
       if (isEx) {
         const id = Number(document.querySelector('input[name="offer"]:checked').value);
         chosenOffer = pending.offers.find((o) => o.id === id);
       }
-      chosen = pending; status = "PENDING"; render();
-      toast(`${chosen.name}님을 선택했어요`);
+      if (!LIVE_MODE) {
+        chosen = pending; status = "PENDING_APPROVAL"; render();
+        toast(`${chosen.name}님을 선택했어요`);
+        return;
+      }
+      const notice = document.getElementById("notice");
+      notice.hidden = false;
+      notice.className = "notice gray";
+      notice.textContent = "지원자를 선택하는 중이에요…";
+      try {
+        requestDetail = await DaetaguhamApi.request(`/requests/${requestDetail.id}/selection`, {
+          method: "PUT",
+          body: { applicationId: Number(pending.id), offerShiftId: chosenOffer?.id || null },
+        });
+        status = requestDetail.status;
+        applicants = requestDetail.applications.map(normalizeApplicant);
+        chosen = applicants.find((item) => item.status === "SELECTED") || pending;
+        chosenOffer = chosen.selectedOffer || chosenOffer;
+        render();
+        toast(`${chosen.name}님을 선택했어요`);
+      } catch (error) {
+        notice.className = "notice gray";
+        notice.textContent = error.message;
+      }
     });
 
     document.getElementById("cancelBtn").addEventListener("click", () => cancelSheet.showModal());
-    cancelSheet.addEventListener("close", () => {
+    cancelSheet.addEventListener("close", async () => {
       if (cancelSheet.returnValue !== "yes") return;
-      status = "CANCELED"; render();
-      toast("요청을 취소했어요");
+      if (!LIVE_MODE) {
+        status = "CANCELED"; render();
+        toast("요청을 취소했어요");
+        return;
+      }
+      try {
+        requestDetail = await DaetaguhamApi.request(`/requests/${requestDetail.id}/cancel`, { method: "PUT" });
+        status = requestDetail.status;
+        render();
+        toast("요청을 취소했어요");
+      } catch (error) {
+        const notice = document.getElementById("notice");
+        notice.hidden = false;
+        notice.className = "notice gray";
+        notice.textContent = error.message;
+      }
     });
 
-    render();
+    if (LIVE_MODE) loadRequest();
+    else {
+      if (isEx) {
+        document.title = "교대 요청 | 알바생";
+        document.getElementById("pageTitle").textContent = "교대 요청";
+        document.getElementById("reqDate").textContent = "9/23(수)";
+        document.getElementById("reqTime").textContent = "14:00–22:00 · 건대점 마감";
+        document.getElementById("reqInfo").innerHTML = '<dt>공개</dt><dd>건대점 직원 중 날짜가 맞는 사람</dd><dt>대신 가능</dt><dd class="num">9/22(화) · 9/26(토) · 10/1(목)</dd><dt>승인</dt><dd>점장님 승인 후 확정</dd>';
+      }
+      render();
+    }
   </script>
 </body>
 </html>

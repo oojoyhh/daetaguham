@@ -56,24 +56,11 @@
         <section class="card tight" id="myRequests" style="margin-top:8px"></section>
 
         <p class="group-title">내가 지원한 요청</p>
-        <section class="card tight" style="margin-top:8px">
-          <a class="list-item" href="apply.html?id=r1&applied=1">
-            <div class="grow"><p class="title num">대타 · 9/21(월) 16:00–22:00</p><p class="desc">권예리님이 고르는 중이에요</p></div>
-            <span class="pill wait">선택 대기</span><span class="chev" aria-hidden="true">›</span>
-          </a>
-          <div class="list-item" style="cursor:default">
-            <div class="grow"><p class="title num">급구 · 9/6(일) 12:00–18:00</p><p class="desc">성수점 · 근무 완료</p></div>
-            <span class="pill ok">확정</span>
-          </div>
-        </section>
+        <section class="card tight" id="appliedRequests" style="margin-top:8px"></section>
 
         <p class="group-title">받은 제안</p>
-        <section class="card tight" style="margin-top:8px">
-          <a class="list-item" href="home.html">
-            <div class="grow"><p class="title num">교대 · 배민혁님</p><p class="desc">내 9/23(수) ⇄ 9/22(화)</p></div>
-            <span class="pill wait">답변 필요</span><span class="chev" aria-hidden="true">›</span>
-          </a>
-        </section>
+        <section class="card tight" id="receivedRequests" style="margin-top:8px"></section>
+        <p class="error-text" id="boardError" role="alert" hidden></p>
         <span class="api-tag" style="margin-top:10px">GET /me/requests?box=sent|applied|received</span>
       </div>
     </main>
@@ -83,13 +70,14 @@
 
   <script src="../js/common.js?v=2"></script>
   <script>
-    // 예시: 한석휘에게 보이는 모집 중 요청
-    const REQUESTS = [
+    const LIVE_MODE = DaetaguhamApi.isSignedIn();
+    const SAMPLE_REQUESTS = [
       { id: "g1", type: "급구", store: "A", date: "2026-09-29", start: "12:00", end: "20:00", who: "김효주 사장님", memo: "미들", note: "지원 1명" },
       { id: "r1", type: "대타", store: "B", date: "2026-09-21", start: "16:00", end: "22:00", who: "권예리", memo: "마감", note: "지원 2명" },
       { id: "r2", type: "교대", store: "B", date: "2026-09-24", start: "10:00", end: "16:00", who: "배민혁", memo: "오픈", note: "대신 일할 수 있는 날 5일 · 내 근무 3개와 맞아요" },
       { id: "r3", type: "대타", store: "B", date: "2026-09-28", start: "12:00", end: "18:00", who: "인수연", memo: "미들", note: "건대점 전체 공개" },
     ];
+    let requests = SAMPLE_REQUESTS;
     let filter = "ALL";
 
     const DEFAULT_MY_REQUESTS = [
@@ -97,7 +85,63 @@
       { type: "교대", when: "9/23(수) 14:00–22:00", desc: "대신 가능한 날 3일 · 지원자 3명", href: "request.html?type=EXCHANGE" },
     ];
 
+    const TYPE_LABEL = { COVER: "대타", EXCHANGE: "교대", OPEN_SHIFT: "급구" };
+    const STATUS_META = {
+      OPEN: ["모집 중", "open"], PENDING_APPROVAL: ["승인 대기", "wait"], CONFIRMED: ["확정", "ok"],
+      CANCELED: ["취소됨", ""], EXPIRED: ["마감", ""],
+    };
+    const normalizeRequest = (item) => ({
+      id: item.id,
+      type: TYPE_LABEL[item.type] || item.type,
+      typeCode: item.type,
+      storeName: item.storeName,
+      date: item.shift.startAt.slice(0, 10),
+      start: item.shift.startAt.slice(11, 16),
+      end: item.shift.endAt.slice(11, 16),
+      who: item.requesterName,
+      memo: item.shift.position || "근무",
+      applicantCount: item.applicantCount,
+      availableDates: item.availableDates || [],
+      status: item.status,
+      mode: item.mode,
+      myApplicationStatus: item.myApplicationStatus,
+    });
+
+    const requestNote = (item) => {
+      if (item.typeCode === "EXCHANGE") return `대신 가능한 날 ${item.availableDates.length}일 · 지원 ${item.applicantCount}명`;
+      if (item.mode === "DIRECT") return "한 명에게 보낸 요청";
+      return item.applicantCount ? `지원 ${item.applicantCount}명` : "아직 지원자가 없어요";
+    };
+
+    const activityDescription = (item, box) => {
+      if (box === "sent") return item.mode === "DIRECT" && item.status === "OPEN"
+        ? "상대의 답변을 기다리고 있어요"
+        : requestNote(item);
+      if (box === "received" && item.myApplicationStatus === "PROPOSED") return `${item.requesterName}님이 답변을 기다리고 있어요`;
+      if (item.myApplicationStatus === "APPLIED") return `${item.requesterName}님이 고르는 중이에요`;
+      if (item.myApplicationStatus === "SELECTED") return item.status === "PENDING_APPROVAL" ? "매장 승인을 기다리고 있어요" : "내 근무로 확정됐어요";
+      if (item.myApplicationStatus === "NOT_SELECTED") return "다른 지원자가 선택됐어요";
+      if (item.myApplicationStatus === "WITHDRAWN") return "지원을 철회했어요";
+      if (item.myApplicationStatus === "DECLINED") return "제안을 거절했어요";
+      return `${item.storeName} · ${STATUS_META[item.status]?.[0] || item.status}`;
+    };
+
+    const renderActivityRows = (items, box) => {
+      if (!items.length) return '<div class="list-item"><div class="grow"><p class="desc">아직 내역이 없어요.</p></div></div>';
+      return items.map((item) => {
+        const [statusLabel, statusClass] = box === "received" && item.myApplicationStatus === "PROPOSED"
+          ? ["답변 필요", "wait"]
+          : (STATUS_META[item.status] || [item.status, ""]);
+        const href = box === "sent" ? `request.html?id=${item.id}` : `apply.html?id=${item.id}`;
+        return `<a class="list-item" href="${href}">
+          <div class="grow"><p class="title num">${escapeHTML(item.type)} · ${fmtDate(item.date)} ${item.start}–${item.end}</p><p class="desc">${escapeHTML(activityDescription(item, box))}</p></div>
+          <span class="pill ${statusClass}">${escapeHTML(statusLabel)}</span><span class="chev" aria-hidden="true">›</span>
+        </a>`;
+      }).join("");
+    };
+
     function renderMyRequests() {
+      if (LIVE_MODE) return;
       const saved = window.getDemoWorkerRequests ? window.getDemoWorkerRequests() : [];
       const queryRequest = params.get("created") === "1" ? [{
         type: params.get("type") || "대타",
@@ -133,20 +177,51 @@
     }
 
     function renderOpen() {
-      const list = REQUESTS.filter((r) => filter === "ALL" || r.type === filter);
+      const list = requests.filter((r) => filter === "ALL" || r.type === filter);
       document.querySelectorAll("[data-filter]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.filter === filter)));
       document.getElementById("openList").innerHTML = list.length ? list.map((r) => `
         <a class="card req" href="apply.html?id=${r.id}">
           <div class="req-head">
             <div class="req-lead"><span class="req-type">${r.type}</span><b class="req-who">${r.who} 요청</b></div>
-            <span class="req-store">배스킨라빈스 · ${r.store === "A" ? "성수점" : "건대점"}</span>
+            <span class="req-store">배스킨라빈스 · ${escapeHTML(r.storeName || (r.store === "A" ? "성수점" : "건대점"))}</span>
           </div>
           <div class="req-schedule">
             <div class="req-date"><strong class="num">${fmtDate(r.date)}</strong><span>· ${r.memo}</span></div>
             <strong class="req-clock num">${r.start}–${r.end}</strong>
           </div>
-          <p class="req-footer">${r.note}</p>
+          <p class="req-footer">${escapeHTML(r.note || requestNote(r))}</p>
         </a>`).join("") : `<div class="card empty">지금은 ${filter} 요청이 없어요</div>`;
+    }
+
+    async function loadOpenRequests() {
+      document.getElementById("openList").innerHTML = '<div class="card empty">요청을 불러오는 중이에요…</div>';
+      try {
+        const type = { 대타: "COVER", 교대: "EXCHANGE", 급구: "OPEN_SHIFT" }[filter];
+        const query = type ? `?type=${type}&page=1&size=50` : "?page=1&size=50";
+        const result = await DaetaguhamApi.request(`/requests${query}`);
+        requests = result.content.map(normalizeRequest);
+        renderOpen();
+      } catch (error) {
+        document.getElementById("openList").innerHTML = `<div class="card empty">${escapeHTML(error.message)}<br><button class="btn btn-sm" type="button" id="retryBoard">다시 시도</button></div>`;
+      }
+    }
+
+    async function loadMyRequests() {
+      const sections = ["myRequests", "appliedRequests", "receivedRequests"];
+      sections.forEach((id) => { document.getElementById(id).innerHTML = '<div class="list-item"><div class="grow"><p class="desc">불러오는 중…</p></div></div>'; });
+      const errorBox = document.getElementById("boardError");
+      errorBox.hidden = true;
+      try {
+        const [sent, applied, received] = await Promise.all(["sent", "applied", "received"].map((box) =>
+          DaetaguhamApi.request(`/me/requests?box=${box}&page=1&size=50`)
+        ));
+        document.getElementById("myRequests").innerHTML = renderActivityRows(sent.content.map(normalizeRequest), "sent");
+        document.getElementById("appliedRequests").innerHTML = renderActivityRows(applied.content.map(normalizeRequest), "applied");
+        document.getElementById("receivedRequests").innerHTML = renderActivityRows(received.content.map(normalizeRequest), "received");
+      } catch (error) {
+        errorBox.textContent = error.message;
+        errorBox.hidden = false;
+      }
     }
 
     function setView(v) {
@@ -155,12 +230,31 @@
       document.getElementById("mineView").hidden = v !== "mine";
     }
 
-    document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
-    document.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => { filter = b.dataset.filter; renderOpen(); }));
+    document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => {
+      setView(b.dataset.view);
+      if (LIVE_MODE && b.dataset.view === "mine") loadMyRequests();
+    }));
+    document.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => {
+      filter = b.dataset.filter;
+      if (LIVE_MODE) loadOpenRequests(); else renderOpen();
+    }));
+    document.getElementById("openList").addEventListener("click", (event) => {
+      if (event.target.id === "retryBoard") loadOpenRequests();
+    });
 
-    renderOpen();
-    renderMyRequests();
-    setView(params.get("tab") === "mine" ? "mine" : "open");
+    const initialView = params.get("tab") === "mine" ? "mine" : "open";
+    setView(initialView);
+    if (LIVE_MODE) {
+      loadOpenRequests();
+      if (initialView === "mine") loadMyRequests();
+    } else {
+      renderOpen();
+      renderMyRequests();
+      document.getElementById("appliedRequests").innerHTML = `
+        <a class="list-item" href="apply.html?id=r1&applied=1"><div class="grow"><p class="title num">대타 · 9/21(월) 16:00–22:00</p><p class="desc">권예리님이 고르는 중이에요</p></div><span class="pill wait">선택 대기</span><span class="chev" aria-hidden="true">›</span></a>`;
+      document.getElementById("receivedRequests").innerHTML = `
+        <a class="list-item" href="home.html"><div class="grow"><p class="title num">교대 · 배민혁님</p><p class="desc">내 9/23(수) ⇄ 9/22(화)</p></div><span class="pill wait">답변 필요</span><span class="chev" aria-hidden="true">›</span></a>`;
+    }
   </script>
 </body>
 </html>

@@ -49,6 +49,7 @@
     <main class="content" id="formView">
       <section class="card shift-sum">
         <p class="help">바꾸고 싶은 근무</p>
+        <select class="input" id="shiftSelect" aria-label="요청할 근무 선택" hidden></select>
         <p class="time num" id="shiftTime"></p>
         <p class="muted" id="shiftMeta"></p>
       </section>
@@ -68,8 +69,8 @@
       <!-- 공개 -->
       <div id="publicBox" class="stack">
         <div class="choices" id="scopeChoices" role="radiogroup" aria-label="공개 범위">
-          <label class="choice"><input type="radio" name="scope" value="STORE" checked><span><b>건대점 직원</b><small>3명에게 보여요</small></span></label>
-          <label class="choice"><input type="radio" name="scope" value="OWNER_STORES"><span><b>사장님 매장 전체</b><small>성수점 · 건대점 9명에게 보여요</small></span></label>
+          <label class="choice"><input type="radio" name="scope" value="STORE" checked><span><b id="scopeStoreLabel">건대점 직원</b><small>같은 매장 직원에게 보여요</small></span></label>
+          <label class="choice"><input type="radio" name="scope" value="OWNER_STORES"><span><b>사장님 매장 전체</b><small>사장님이 운영하는 다른 매장까지 보여요</small></span></label>
         </div>
         <p class="help" id="exchangeScopeNote" hidden>교대는 같은 매장 직원끼리만 할 수 있어요.</p>
 
@@ -128,19 +129,15 @@
   <script src="../js/common.js?v=2"></script>
   <script>
     document.getElementById("backIcon").outerHTML = BACK_ICON;
-
-    // 예시: 내 근무 (home.html과 같은 데이터)
-    const MY_SHIFTS = {
+    const LIVE_MODE = DaetaguhamApi.isSignedIn();
+    const SAMPLE_SHIFTS = {
       107: { date: "2026-09-16", start: "14:00", end: "22:00", memo: "마감" },
       109: { date: "2026-09-20", start: "10:00", end: "16:00", memo: "오픈" },
       110: { date: "2026-09-23", start: "14:00", end: "22:00", memo: "마감" },
       112: { date: "2026-09-27", start: "10:00", end: "16:00", memo: "오픈" },
       113: { date: "2026-09-30", start: "14:00", end: "22:00", memo: "마감" },
     };
-    const shift = MY_SHIFTS[params.get("shift")] || MY_SHIFTS[110];
-
-    // 예시: 요청할 수 있는 동료 (시간 겹치는 사람은 서버에서 이미 뺌)
-    const PEOPLE = [
+    const SAMPLE_PEOPLE = [
       { id: "minhyeok", name: "배민혁", ai: "그 시간에 근무가 없고, 나를 3번 도와줬어요",
         shifts: [{ id: 201, date: "2026-09-22", start: "14:00", end: "22:00", memo: "마감" }, { id: 202, date: "2026-09-26", start: "10:00", end: "16:00", memo: "오픈" }, { id: 206, date: "2026-10-03", start: "14:00", end: "22:00", memo: "마감" }] },
       { id: "suyeon", name: "인수연", ai: "이번 주 근무가 가장 적어요 (6시간)",
@@ -148,10 +145,90 @@
       { id: "yeri", name: "권예리", ai: "수요일 저녁에 자주 일하고, 가능 시간이 맞아요",
         shifts: [{ id: 204, date: "2026-09-21", start: "16:00", end: "22:00", memo: "마감" }, { id: 205, date: "2026-09-28", start: "16:00", end: "22:00", memo: "마감" }, { id: 208, date: "2026-10-05", start: "16:00", end: "22:00", memo: "마감" }] },
     ];
-
+    const normalizeShift = (item) => ({
+      id: item.id,
+      date: item.startAt.slice(0, 10),
+      start: item.startAt.slice(11, 16),
+      end: item.endAt.slice(11, 16),
+      memo: item.position || "근무",
+      storeName: item.storeName || "내 매장",
+    });
+    const localDate = (date) => toISO(date.getFullYear(), date.getMonth() + 1, date.getDate());
+    const today = LIVE_MODE ? localDate(new Date()) : TODAY;
+    let myShifts = LIVE_MODE ? [] : Object.values(SAMPLE_SHIFTS).map((item, index) => ({ ...item, id: Number(Object.keys(SAMPLE_SHIFTS)[index]), storeName: "건대점" }));
+    let shift = LIVE_MODE ? null : (SAMPLE_SHIFTS[params.get("shift")] || SAMPLE_SHIFTS[110]);
+    let people = LIVE_MODE ? [] : SAMPLE_PEOPLE;
     const state = { type: params.get("type") === "EXCHANGE" ? "EXCHANGE" : "COVER", mode: "PUBLIC", person: null, theirShifts: new Set(), acceptDates: new Set() };
-    const busyDates = new Set(Object.values(MY_SHIFTS).map((s) => s.date));
-    const acceptView = { year: Number(shift.date.slice(0, 4)), month: Number(shift.date.slice(5, 7)) };
+    let busyDates = new Set(myShifts.map((s) => s.date));
+    const acceptView = { year: Number((shift?.date || today).slice(0, 4)), month: Number((shift?.date || today).slice(5, 7)) };
+
+    const showFormError = (message) => {
+      const error = document.getElementById("formError");
+      error.textContent = message;
+      error.hidden = !message;
+    };
+
+    function renderShift() {
+      if (!shift) {
+        document.getElementById("shiftTime").textContent = "요청할 수 있는 근무가 없어요";
+        document.getElementById("shiftMeta").textContent = "앞으로 예정된 내 근무가 배정되면 요청할 수 있어요.";
+        return;
+      }
+      document.getElementById("shiftTime").textContent = `${fmtDate(shift.date)} ${shift.start}–${shift.end}`;
+      document.getElementById("shiftMeta").textContent = `${shift.storeName || "건대점"} · ${shift.memo}`;
+      document.getElementById("scopeStoreLabel").textContent = `${shift.storeName || "내 매장"} 직원`;
+      acceptView.year = Number(shift.date.slice(0, 4));
+      acceptView.month = Number(shift.date.slice(5, 7));
+    }
+
+    async function loadCandidates() {
+      if (!LIVE_MODE || state.mode !== "DIRECT" || !shift) return;
+      const box = document.getElementById("people");
+      box.innerHTML = '<div class="empty">추천 후보를 불러오는 중이에요…</div>';
+      showFormError("");
+      try {
+        const scope = state.type === "EXCHANGE" ? "STORE" : document.querySelector('input[name="scope"]:checked').value;
+        const result = await DaetaguhamApi.request(`/shifts/${shift.id}/candidates?type=${state.type}&scope=${scope}&limit=20`);
+        people = result.candidates.map((person) => ({
+          id: person.userId,
+          name: person.name,
+          ai: person.aiReason,
+          shifts: (person.shifts || []).map(normalizeShift),
+        }));
+      } catch (error) {
+        people = [];
+        showFormError(error.message);
+      }
+      state.person = null;
+      state.theirShifts.clear();
+      render();
+    }
+
+    async function loadLiveForm() {
+      const button = document.getElementById("submitBtn");
+      button.disabled = true;
+      button.textContent = "근무를 불러오는 중…";
+      try {
+        const until = new Date();
+        until.setMonth(until.getMonth() + 4);
+        const result = await DaetaguhamApi.request(`/me/shifts?from=${today}&to=${localDate(until)}`);
+        myShifts = result.filter((item) => item.status !== "DONE" && !item.openRequest).map((item) => ({ ...normalizeShift(item), storeName: item.storeName }));
+        busyDates = new Set(myShifts.map((item) => item.date));
+        const requestedId = Number(params.get("shift"));
+        shift = myShifts.find((item) => item.id === requestedId) || myShifts[0] || null;
+        const select = document.getElementById("shiftSelect");
+        select.hidden = myShifts.length < 2;
+        select.innerHTML = myShifts.map((item) => `<option value="${item.id}" ${item.id === shift?.id ? "selected" : ""}>${fmtDate(item.date)} ${item.start}–${item.end} · ${escapeHTML(item.storeName)} ${escapeHTML(item.memo)}</option>`).join("");
+        renderShift();
+        render();
+      } catch (error) {
+        showFormError(error.message);
+      } finally {
+        button.disabled = !shift;
+        if (!shift) button.textContent = "요청할 근무가 없어요";
+        else render();
+      }
+    }
 
     // 공개 교대: 내가 대신 일할 수 있는 날 달력
     function renderAcceptCalendar() {
@@ -164,7 +241,7 @@
         const iso = toISO(year, month, i + 1);
         const isOrigin = iso === shift.date;
         const isBusy = !isOrigin && busyDates.has(iso);
-        const pickable = iso > TODAY && !isOrigin && !isBusy;
+        const pickable = iso > today && !isOrigin && !isBusy;
         const selected = state.acceptDates.has(iso);
         const cls = ["calendar-day", pickable ? "pickable" : "", isBusy ? "busy" : "", isOrigin ? "origin" : "", selected ? "selected" : ""].join(" ");
         const label = `${month}월 ${i + 1}일${isOrigin ? " 바꿀 근무" : isBusy ? " 이미 근무 있음" : ""}`;
@@ -196,8 +273,7 @@
       renderAcceptCalendar();
     });
 
-    document.getElementById("shiftTime").textContent = `${fmtDate(shift.date)} ${shift.start}–${shift.end}`;
-    document.getElementById("shiftMeta").textContent = `건대점 · ${shift.memo}`;
+    renderShift();
     document.querySelector(`input[name="type"][value="${state.type}"]`).checked = true;
 
     function render() {
@@ -209,18 +285,18 @@
       // 교대는 같은 매장만
       document.getElementById("scopeChoices").hidden = isEx;
       document.getElementById("exchangeScopeNote").hidden = !isEx;
-      const showAccept = isEx && state.mode === "PUBLIC";
+      const showAccept = isEx && state.mode === "PUBLIC" && Boolean(shift);
       document.getElementById("acceptDatesBox").hidden = !showAccept;
       if (showAccept) renderAcceptCalendar();
 
-      document.getElementById("people").innerHTML = PEOPLE.map((p) => `
+      document.getElementById("people").innerHTML = people.length ? people.map((p) => `
         <label class="person">
           <input type="radio" name="person" value="${p.id}" ${state.person === p.id ? "checked" : ""}>
           <span class="avatar">${shortName(p.name)}</span>
-          <span class="grow"><b>${p.name}</b><p class="reason">${isEx ? `교환 가능 · ${p.shifts.map((s) => fmtDate(s.date)).join(" · ")}` : `${fmtDate(shift.date)} 근무 가능`}</p><p class="ai-reason"><span class="ai-mark">AI</span>${p.ai}</p></span>
-        </label>`).join("");
+          <span class="grow"><b>${escapeHTML(p.name)}</b><p class="reason">${isEx ? `교환 가능 · ${p.shifts.map((s) => fmtDate(s.date)).join(" · ")}` : `${fmtDate(shift.date)} 근무 가능`}</p><p class="ai-reason"><span class="ai-mark">AI</span>${escapeHTML(p.ai)}</p></span>
+        </label>`).join("") : '<div class="empty">조건에 맞는 추천 후보가 없어요.</div>';
 
-      const p = PEOPLE.find((x) => x.id === state.person);
+      const p = people.find((x) => String(x.id) === String(state.person));
       const showTheirs = isEx && state.mode === "DIRECT" && p;
       document.getElementById("theirShiftsBox").hidden = !showTheirs;
       if (showTheirs) {
@@ -239,10 +315,24 @@
 
     document.querySelectorAll('input[name="type"]').forEach((r) => r.addEventListener("change", () => {
       state.type = r.value; state.theirShifts = new Set(); render();
+      if (state.mode === "DIRECT") loadCandidates();
     }));
     document.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => {
       state.mode = b.dataset.mode; render();
+      if (state.mode === "DIRECT") loadCandidates();
     }));
+    document.querySelectorAll('input[name="scope"]').forEach((input) => input.addEventListener("change", () => {
+      if (state.mode === "DIRECT") loadCandidates();
+    }));
+    document.getElementById("shiftSelect").addEventListener("change", () => {
+      shift = myShifts.find((item) => String(item.id) === document.getElementById("shiftSelect").value);
+      state.person = null;
+      state.theirShifts.clear();
+      state.acceptDates.clear();
+      renderShift();
+      render();
+      if (state.mode === "DIRECT") loadCandidates();
+    });
     document.getElementById("people").addEventListener("change", (e) => {
       state.person = e.target.value; state.theirShifts = new Set(); render();
     });
@@ -252,18 +342,46 @@
       else state.theirShifts.delete(id);
     });
 
-    document.getElementById("submitBtn").addEventListener("click", () => {
-      const err = document.getElementById("formError");
+    document.getElementById("submitBtn").addEventListener("click", async () => {
       const isEx = state.type === "EXCHANGE";
       let msg = "";
+      if (!shift) msg = "요청할 근무를 먼저 골라주세요.";
       if (state.mode === "DIRECT" && !state.person) msg = "부탁할 사람을 골라주세요.";
       else if (state.mode === "DIRECT" && isEx && state.theirShifts.size === 0) msg = "교환할 근무를 하나 이상 골라주세요.";
       else if (state.mode === "PUBLIC" && isEx && state.acceptDates.size === 0) msg = "달력에서 대신 일할 수 있는 날을 하나 이상 골라주세요.";
-      if (msg) { err.textContent = msg; err.hidden = false; return; }
-      err.hidden = true;
+      if (msg) { showFormError(msg); return; }
+      showFormError("");
 
       const label = isEx ? "교대" : "대타";
-      const p = PEOPLE.find((x) => x.id === state.person);
+      const p = people.find((x) => String(x.id) === String(state.person));
+      if (LIVE_MODE) {
+        const button = document.getElementById("submitBtn");
+        button.disabled = true;
+        button.textContent = "요청 올리는 중…";
+        try {
+          const createdRequest = await DaetaguhamApi.request("/requests", {
+            method: "POST",
+            body: {
+              type: state.type,
+              shiftId: shift.id,
+              mode: state.mode,
+              scope: isEx ? "STORE" : document.querySelector('input[name="scope"]:checked').value,
+              targetUserId: state.mode === "DIRECT" ? Number(state.person) : null,
+              targetShiftIds: state.mode === "DIRECT" && isEx ? [...state.theirShifts] : [],
+              availableDates: state.mode === "PUBLIC" && isEx ? [...state.acceptDates].sort() : [],
+              reason: document.getElementById("reason").value.trim() || "개인 사정",
+            },
+          });
+          document.getElementById("doneRequestsLink").href = `request.html?id=${createdRequest.id}`;
+          document.getElementById("doneHomeLink").href = "home.html";
+          showDone(label, p);
+        } catch (error) {
+          showFormError(error.message);
+          button.disabled = false;
+          render();
+        }
+        return;
+      }
       const createdRequest = addDemoWorkerRequest({
         id: `demo-${Date.now()}`,
         type: label,
@@ -291,24 +409,30 @@
       });
       document.getElementById("doneRequestsLink").href = `board.html?${resultParams}`;
       document.getElementById("doneHomeLink").href = `home.html?date=${shift.date}&requestType=${encodeURIComponent(label)}`;
+      showDone(label, p);
+    });
+
+    function showDone(label, p) {
+      const isEx = state.type === "EXCHANGE";
       if (state.mode === "DIRECT") {
         document.getElementById("doneTitle").textContent = `${p.name}님에게 ${label}를 부탁했어요`;
         document.getElementById("doneDesc").textContent = isEx
           ? `선택한 ${state.theirShifts.size}개 근무 중 가능한 날짜를 고르면 알려드려요.`
           : "수락하면 알려드려요. 거절하면 다른 사람에게 다시 부탁하거나 모두에게 올릴 수 있어요.";
       } else {
-        const scope = isEx ? "건대점 직원" : (document.querySelector('input[name="scope"]:checked').value === "STORE" ? "건대점 직원" : "사장님 매장 전체");
+        const scope = isEx ? `${shift.storeName || "내 매장"} 직원` : (document.querySelector('input[name="scope"]:checked').value === "STORE" ? `${shift.storeName || "내 매장"} 직원` : "사장님 매장 전체");
         document.getElementById("doneTitle").textContent = `${label} 요청을 올렸어요`;
         document.getElementById("doneDesc").textContent = isEx
-          ? `고른 ${state.acceptDates.size}일 중에 근무가 있는 건대점 직원에게 알림을 보냈어요.`
+          ? `고른 ${state.acceptDates.size}일 중에 근무가 있는 ${shift.storeName || "내 매장"} 직원에게 알림을 보냈어요.`
           : `${scope} 중 그 시간에 일할 수 있는 사람에게 알림을 보냈어요.`;
       }
       document.getElementById("formView").hidden = true;
       document.getElementById("doneView").hidden = false;
       window.scrollTo(0, 0);
-    });
+    }
 
     render();
+    if (LIVE_MODE) loadLiveForm();
   </script>
 </body>
 </html>

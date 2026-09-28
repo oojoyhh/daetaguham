@@ -91,6 +91,7 @@
         </div>
         <p class="error-text" id="applyError" hidden></p>
         <div class="bottom-bar apply-actions">
+          <button class="btn btn-block" type="button" id="declineBtn" hidden>제안 거절하기</button>
           <button class="btn btn-primary btn-block" type="button" id="applyBtn">지원하기</button>
           <span class="api-tag" style="margin-top:6px">POST /requests/{id}/applications</span>
         </div>
@@ -123,8 +124,8 @@
   <script src="../js/common.js"></script>
   <script>
     document.getElementById("backIcon").outerHTML = BACK_ICON;
-
-    const REQUESTS = {
+    const LIVE_MODE = DaetaguhamApi.isSignedIn();
+    const SAMPLE_REQUESTS = {
       g1: { type: "급구", store: "건대점", date: "2026-09-29", start: "12:00", end: "20:00", memo:"미들", from: "김효주 사장님", picker: "사장님", info: [] },
       r1: { type: "대타", store: "건대점", date: "2026-09-21", start: "16:00", end: "22:00", memo:"마감", from: "권예리", picker: "권예리님",
             info: [["사유", "가족 일정이 생겼어요"]], relation: "권예리님은 나를 1번, 나는 권예리님을 2번 도와줬어요" },
@@ -135,8 +136,7 @@
       r3: { type: "대타", store: "건대점", date: "2026-09-28", start: "12:00", end: "18:00", memo:"미들", from: "인수연", picker: "인수연님",
             info: [["공개", "사장님 매장 전체"]], relation: "인수연님과는 아직 주고받은 기록이 없어요" },
     };
-    // 교대에 내놓을 수 있는 내 근무 (같은 매장 · 앞으로 · 요청 중이 아닌 근무)
-    const MY_OFFERS = [
+    const SAMPLE_OFFERS = [
       { id: 107, date: "2026-09-16", start: "14:00", end: "22:00", memo: "마감" },
       { id: 109, date: "2026-09-20", start: "10:00", end: "16:00", memo: "오픈" },
       { id: 112, date: "2026-09-27", start: "10:00", end: "16:00", memo: "오픈" },
@@ -144,36 +144,61 @@
       { id: 115, date: "2026-10-08", start: "10:00", end: "16:00", memo: "오픈" },
       { id: 116, date: "2026-10-17", start: "12:00", end: "18:00", memo: "미들" },
     ];
-    const req = REQUESTS[params.get("id")] || REQUESTS.r1;
+    let req = SAMPLE_REQUESTS[params.get("id")] || SAMPLE_REQUESTS.r1;
+    let requestDetail = null;
+    let myApplication = null;
+    let myOffers = SAMPLE_OFFERS;
     let applied = params.get("applied") === "1";
     const selectedOfferIds = new Set();
     let offerView = { year:2026, month:9 };
+    let isEx = req.type === "교대";
 
-    document.getElementById("pageTitle").textContent = `${req.type} ${req.type === "급구" ? "지원" : "요청"}`;
-    document.getElementById("typeLabel").textContent = req.type;
-    document.getElementById("requester").textContent = `${req.from}${req.type === "급구" ? "" : "님"} 요청`;
-    document.getElementById("date").textContent = fmtDate(req.date);
-    document.getElementById("memo").textContent = `· ${req.memo}`;
-    document.getElementById("time").textContent = `${req.start}–${req.end}`;
-    document.getElementById("requestMeta").textContent = req.store;
-    const info = document.getElementById("info");
-    info.innerHTML = req.info.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHTML(v)}</dd>`).join("");
-    info.hidden = req.info.length === 0;
+    const normalizeShift = (shift) => ({
+      id: shift.id,
+      storeId: shift.storeId,
+      date: shift.startAt.slice(0, 10),
+      start: shift.startAt.slice(11, 16),
+      end: shift.endAt.slice(11, 16),
+      memo: shift.position || "근무",
+    });
+    const typeLabel = (type) => ({ COVER: "대타", EXCHANGE: "교대", OPEN_SHIFT: "급구" }[type] || type);
+    const setError = (message) => {
+      const error = document.getElementById("applyError");
+      error.textContent = message;
+      error.hidden = !message;
+    };
 
-    if (req.relation) {
+    function renderSummary() {
+      document.getElementById("pageTitle").textContent = `${req.type} ${req.type === "급구" ? "지원" : "요청"}`;
+      document.getElementById("typeLabel").textContent = req.type;
+      document.getElementById("requester").textContent = `${req.from}${req.type === "급구" || req.from.endsWith("님") ? "" : "님"} 요청`;
+      document.getElementById("date").textContent = fmtDate(req.date);
+      document.getElementById("memo").textContent = `· ${req.memo}`;
+      document.getElementById("time").textContent = `${req.start}–${req.end}`;
+      document.getElementById("requestMeta").textContent = req.store;
+      const info = document.getElementById("info");
+      info.innerHTML = req.info.map(([key, value]) => `<dt>${escapeHTML(key)}</dt><dd>${escapeHTML(value)}</dd>`).join("");
+      info.hidden = req.info.length === 0;
       const rel = document.getElementById("relation");
-      rel.textContent = req.relation;
-      rel.hidden = false;
+      rel.textContent = req.relation || "";
+      rel.hidden = !req.relation;
+      isEx = req.type === "교대";
+      document.getElementById("offerBox").hidden = !isEx;
+      if (isEx && req.acceptDates?.length) {
+        const note = document.getElementById("acceptNote");
+        const matched = myOffers.filter((shift) => req.acceptDates.includes(shift.date)).length;
+        note.innerHTML = `${escapeHTML(req.from)}님이 대신 일할 수 있는 날은 <b>${req.acceptDates.map(fmtDate).join(" · ")}</b>이에요. 이 중 내 근무가 있는 <b>${matched}일</b>만 제안할 수 있어요.`;
+        note.hidden = false;
+        document.getElementById("offerLegend").hidden = false;
+        document.getElementById("offerHelp").textContent = "색이 칠해진 날의 내 근무를 여러 개 고를 수 있어요";
+      }
     }
 
-    const isEx = req.type === "교대";
-    document.getElementById("offerBox").hidden = !isEx;
-    document.getElementById("applyBtn").textContent = isEx ? "이 근무로 교대 제안하기" : "지원하기";
-
-    if (isEx && req.acceptDates) {
+    function renderAcceptNote() {
+      if (!isEx || !req.acceptDates?.length) return;
       const note = document.getElementById("acceptNote");
-      const matched = MY_OFFERS.filter((s) => req.acceptDates.includes(s.date)).length;
-      note.innerHTML = `${req.from}님이 대신 일할 수 있는 날은 <b>${req.acceptDates.map(fmtDate).join(" · ")}</b>이에요. 이 중 내 근무가 있는 <b>${matched}일</b>만 제안할 수 있어요.`;
+      const matched = myOffers.filter((shift) => req.acceptDates.includes(shift.date)).length;
+      note.innerHTML = `${escapeHTML(req.from)}님이 대신 일할 수 있는 날은 <b>${req.acceptDates.map(fmtDate).join(" · ")}</b>이에요. 이 중 내 근무가 있는 <b>${matched}일</b>만 제안할 수 있어요.`;
       note.hidden = false;
       document.getElementById("offerLegend").hidden = false;
       document.getElementById("offerHelp").textContent = "색이 칠해진 날의 내 근무를 여러 개 고를 수 있어요";
@@ -187,7 +212,7 @@
       const firstDay = new Date(year, monthIndex, 1).getDay();
       const lastDate = new Date(year, monthIndex + 1, 0).getDate();
       const accept = req.acceptDates ? new Set(req.acceptDates) : null;
-      const byDate = new Map(MY_OFFERS.map((s) => [s.date, s]));
+      const byDate = new Map(myOffers.map((s) => [s.date, s]));
       const blanks = Array.from({ length:firstDay }, () => '<span aria-hidden="true"></span>').join("");
       const days = Array.from({ length:lastDate }, (_, i) => {
         const day = i + 1;
@@ -204,10 +229,15 @@
       }).join("");
       document.getElementById("offerCalendar").innerHTML = weekdays.map((d) => `<span class="weekday">${d}</span>`).join("") + blanks + days;
       const detail = document.getElementById("selectedOffer");
-      const selectedOffers = MY_OFFERS.filter((s) => selectedOfferIds.has(s.id));
+      const selectedOffers = myOffers.filter((s) => selectedOfferIds.has(s.id));
       detail.hidden = selectedOffers.length === 0;
       detail.innerHTML = selectedOffers.length ? `<div class="selected-offer-head"><b>선택한 내 근무</b><span>${selectedOffers.length}개</span></div><div class="selected-offer-list">${selectedOffers.map((s) => `<div class="selected-offer-row"><span class="num">${fmtDate(s.date)} · ${s.memo}</span><strong class="num">${s.start}–${s.end}</strong></div>`).join("")}</div>` : "";
-      if (isEx) document.getElementById("applyBtn").textContent = selectedOffers.length ? `선택한 근무 ${selectedOffers.length}개로 교대 제안하기` : "교대할 근무 선택하기";
+      if (isEx) {
+        const proposed = myApplication?.status === "PROPOSED";
+        document.getElementById("applyBtn").textContent = selectedOffers.length
+          ? (proposed ? "선택한 근무로 교대 수락하기" : `선택한 근무 ${selectedOffers.length}개로 교대 제안하기`)
+          : "교대할 근무 선택하기";
+      }
     }
 
     document.getElementById("offerCalendar").addEventListener("click", (e) => {
@@ -215,7 +245,10 @@
       if (!day) return;
       const offerId = Number(day.dataset.offerId);
       if (selectedOfferIds.has(offerId)) selectedOfferIds.delete(offerId);
-      else selectedOfferIds.add(offerId);
+      else {
+        if (myApplication?.status === "PROPOSED") selectedOfferIds.clear();
+        selectedOfferIds.add(offerId);
+      }
       document.getElementById("applyError").hidden = true;
       renderOfferCalendar();
     });
@@ -229,41 +262,174 @@
       if (offerView.month > 12) { offerView.month = 1; offerView.year += 1; }
       renderOfferCalendar();
     });
-    renderOfferCalendar();
-
     function render() {
       const pill = document.getElementById("statusPill");
-      pill.className = `pill ${applied ? "wait" : "open"}`;
-      pill.textContent = applied ? "선택 대기" : "모집 중";
-      document.getElementById("applyBox").hidden = applied;
-      document.getElementById("appliedBox").hidden = !applied;
-      document.getElementById("appliedText").textContent = `지원했어요. ${req.picker}이 고르면 알림으로 알려드려요.`;
+      const applicationStatus = myApplication?.status;
+      const requestStatus = requestDetail?.status || "OPEN";
+      const canApply = requestStatus === "OPEN" && (!applicationStatus || applicationStatus === "WITHDRAWN");
+      const proposed = applicationStatus === "PROPOSED";
+      const waiting = applicationStatus === "APPLIED";
+      const selected = applicationStatus === "SELECTED";
+      const showForm = canApply || proposed;
+      document.getElementById("applyBox").hidden = !showForm;
+      document.getElementById("appliedBox").hidden = showForm;
+      document.getElementById("declineBtn").hidden = !proposed;
+
+      if (proposed) {
+        pill.className = "pill wait"; pill.textContent = "답변 필요";
+        document.getElementById("applyBtn").textContent = isEx ? "교대할 근무 선택하기" : "제안 수락하기";
+      } else if (waiting) {
+        pill.className = "pill wait"; pill.textContent = "선택 대기";
+        document.getElementById("appliedText").textContent = `지원했어요. ${req.picker}이 고르면 알림으로 알려드려요.`;
+      } else if (selected) {
+        pill.className = `pill ${requestStatus === "CONFIRMED" ? "ok" : "wait"}`;
+        pill.textContent = requestStatus === "CONFIRMED" ? "확정" : "승인 대기";
+        document.getElementById("appliedText").textContent = requestStatus === "CONFIRMED" ? "근무가 확정되어 내 근무표에 반영됐어요." : "선택됐어요. 매장 승인을 기다리고 있어요.";
+      } else if (["CANCELED", "EXPIRED"].includes(requestStatus)) {
+        pill.className = "pill"; pill.textContent = requestStatus === "EXPIRED" ? "마감" : "취소됨";
+        document.getElementById("appliedText").textContent = requestStatus === "EXPIRED" ? "근무 시작 시간이 지나 요청이 마감됐어요." : "요청자가 요청을 취소했어요.";
+      } else if (["DECLINED", "NOT_SELECTED", "REJECTED"].includes(applicationStatus)) {
+        pill.className = "pill";
+        pill.textContent = applicationStatus === "DECLINED" ? "거절함" : applicationStatus === "REJECTED" ? "반려됨" : "미선택";
+        document.getElementById("appliedText").textContent = applicationStatus === "DECLINED" ? "제안을 거절했어요." : applicationStatus === "REJECTED" ? "매장에서 변경을 반려했어요." : "다른 지원자가 선택됐어요.";
+      } else {
+        pill.className = "pill open"; pill.textContent = "모집 중";
+        if (!isEx) document.getElementById("applyBtn").textContent = "지원하기";
+      }
+      document.getElementById("withdrawBtn").hidden = !waiting;
+      if (isEx && showForm) renderOfferCalendar();
     }
 
-    document.getElementById("applyBtn").addEventListener("click", () => {
-      const err = document.getElementById("applyError");
+    async function loadLiveRequest() {
+      const id = params.get("id");
+      if (!id) { setError("요청 번호가 없어요."); return; }
+      document.getElementById("applyBtn").disabled = true;
+      document.getElementById("applyBtn").textContent = "요청을 불러오는 중…";
+      try {
+        requestDetail = await DaetaguhamApi.request(`/requests/${id}`);
+        myApplication = requestDetail.myApplication;
+        const shift = requestDetail.shift;
+        req = {
+          type: typeLabel(requestDetail.type), store: requestDetail.storeName,
+          date: shift.startAt.slice(0, 10), start: shift.startAt.slice(11, 16), end: shift.endAt.slice(11, 16),
+          memo: shift.position || "근무", from: requestDetail.requesterName,
+          picker: requestDetail.type === "OPEN_SHIFT" ? "사장님" : `${requestDetail.requesterName}님`,
+          info: requestDetail.reason ? [["사유", requestDetail.reason]] : [],
+          acceptDates: requestDetail.availableDates || [],
+          relation: myApplication?.giveTake
+            ? `${requestDetail.requesterName}님은 나를 ${myApplication.giveTake.gotFromMe}번, 나는 ${requestDetail.requesterName}님을 ${myApplication.giveTake.gaveToMe}번 도와줬어요`
+            : null,
+        };
+        isEx = requestDetail.type === "EXCHANGE";
+        if (isEx) {
+          if (myApplication?.status === "PROPOSED") {
+            myOffers = (myApplication.offeredShifts || []).map(normalizeShift);
+          } else if (req.acceptDates.length) {
+            const sorted = [...req.acceptDates].sort();
+            const shifts = await DaetaguhamApi.request(`/me/shifts?from=${sorted[0]}&to=${sorted[sorted.length - 1]}`);
+            myOffers = shifts.filter((item) => item.storeId === requestDetail.shift.storeId && req.acceptDates.includes(item.startAt.slice(0, 10)) && !item.openRequest).map(normalizeShift);
+          } else {
+            myOffers = [];
+          }
+          const firstDate = (myOffers[0]?.date || req.acceptDates[0] || req.date);
+          offerView = { year: Number(firstDate.slice(0, 4)), month: Number(firstDate.slice(5, 7)) };
+        }
+        renderSummary();
+        renderAcceptNote();
+        render();
+      } catch (error) {
+        setError(error.message);
+      } finally {
+        document.getElementById("applyBtn").disabled = false;
+      }
+    }
+
+    document.getElementById("applyBtn").addEventListener("click", async () => {
       if (isEx && selectedOfferIds.size === 0) {
-        err.textContent = "달력에서 제안할 내 근무를 하나 이상 골라주세요.";
-        err.hidden = false;
+        setError("달력에서 제안할 내 근무를 하나 이상 골라주세요.");
         return;
       }
-      err.hidden = true;
+      setError("");
+      if (LIVE_MODE) {
+        const button = document.getElementById("applyBtn");
+        button.disabled = true;
+        button.textContent = myApplication?.status === "PROPOSED" ? "수락하는 중…" : "지원하는 중…";
+        try {
+          if (myApplication?.status === "PROPOSED") {
+            requestDetail = await DaetaguhamApi.request(`/applications/${myApplication.id}/response`, {
+              method: "PUT", body: { accept: true, offerShiftId: isEx ? [...selectedOfferIds][0] : null },
+            });
+            myApplication = requestDetail.myApplication;
+            toast("제안을 수락했어요");
+          } else {
+            myApplication = await DaetaguhamApi.request(`/requests/${requestDetail.id}/applications`, {
+              method: "POST", body: { offeredShiftIds: isEx ? [...selectedOfferIds] : [], message: null },
+            });
+            toast("지원했어요");
+          }
+          render();
+          window.scrollTo(0, 0);
+        } catch (error) {
+          setError(error.message);
+        } finally {
+          button.disabled = false;
+        }
+        return;
+      }
       applied = true;
+      myApplication = { status: "APPLIED" };
       render();
       window.scrollTo(0, 0);
       toast("지원했어요");
     });
 
+    document.getElementById("declineBtn").addEventListener("click", async () => {
+      if (!LIVE_MODE || myApplication?.status !== "PROPOSED") return;
+      const button = document.getElementById("declineBtn");
+      button.disabled = true;
+      try {
+        requestDetail = await DaetaguhamApi.request(`/applications/${myApplication.id}/response`, {
+          method: "PUT", body: { accept: false, offerShiftId: null },
+        });
+        myApplication = requestDetail.myApplication;
+        render();
+        toast("제안을 거절했어요");
+      } catch (error) {
+        setError(error.message);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
     const sheet = document.getElementById("withdrawSheet");
     document.getElementById("withdrawBtn").addEventListener("click", () => sheet.showModal());
-    sheet.addEventListener("close", () => {
+    sheet.addEventListener("close", async () => {
       if (sheet.returnValue !== "yes") return;
+      if (LIVE_MODE) {
+        try {
+          myApplication = await DaetaguhamApi.request(`/applications/${myApplication.id}/withdraw`, { method: "PUT" });
+          selectedOfferIds.clear();
+          render();
+          toast("지원을 철회했어요");
+        } catch (error) {
+          setError(error.message);
+        }
+        return;
+      }
       applied = false;
+      myApplication = null;
       render();
       toast("지원을 철회했어요");
     });
 
-    render();
+    if (LIVE_MODE) loadLiveRequest();
+    else {
+      renderSummary();
+      renderAcceptNote();
+      renderOfferCalendar();
+      if (applied) myApplication = { status: "APPLIED" };
+      render();
+    }
   </script>
 </body>
 </html>
