@@ -336,6 +336,136 @@ class RequestApiIntegrationTest {
 				.andExpect(jsonPath("$.errorCode").value("SHIFT_HAS_REQUEST"));
 	}
 
+	@Test
+	void publicCoverSelectionApprovalChangesWorkerAndClosesOtherApplications() throws Exception {
+		activate(outsider, MemberRole.WORKER);
+		MvcResult requestResult = createPublicRequest("COVER", null);
+		Long requestId = jsonLong(requestResult, "$.id");
+		Long selectedId = jsonLong(apply(requestId, coworker, null), "$.id");
+		apply(requestId, outsider, null);
+
+		mockMvc.perform(put("/requests/{requestId}/selection", requestId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(worker))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"applicationId":%d}
+						""".formatted(selectedId)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("PENDING_APPROVAL"));
+
+		mockMvc.perform(get("/stores/{storeId}/approvals", store.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].request.id").value(requestId))
+				.andExpect(jsonPath("$[0].selectedApplication.id").value(selectedId))
+				.andExpect(jsonPath("$[0].changes[0].before.workerName").value("김민"))
+				.andExpect(jsonPath("$[0].changes[0].after.workerName").value("이진호"));
+
+		mockMvc.perform(put("/requests/{requestId}/approval", requestId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"decision\":\"APPROVE\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("CONFIRMED"))
+				.andExpect(jsonPath("$.shift.workerName").value("이진호"));
+
+		mockMvc.perform(get("/requests/{requestId}", requestId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(worker)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.applications[0].status").value("SELECTED"))
+				.andExpect(jsonPath("$.applications[1].status").value("NOT_SELECTED"));
+	}
+
+	@Test
+	void rejectionRequiresCommentAndReopensRequestWithoutChangingWorker() throws Exception {
+		activate(outsider, MemberRole.MANAGER);
+		MvcResult requestResult = createPublicRequest("COVER", null);
+		Long requestId = jsonLong(requestResult, "$.id");
+		Long applicationId = jsonLong(apply(requestId, coworker, null), "$.id");
+		select(requestId, applicationId, null);
+
+		mockMvc.perform(put("/requests/{requestId}/approval", requestId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(worker))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"decision\":\"APPROVE\"}"))
+				.andExpect(status().isForbidden());
+
+		mockMvc.perform(put("/requests/{requestId}/approval", requestId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(outsider))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"decision\":\"REJECT\"}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.errorCode").value("INVALID_REQUEST"));
+
+		mockMvc.perform(put("/requests/{requestId}/approval", requestId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(outsider))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"decision":"REJECT","comment":"이번 주 근무가 너무 많아요."}
+						"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("OPEN"))
+				.andExpect(jsonPath("$.shift.workerName").value("김민"));
+
+		mockMvc.perform(get("/requests/{requestId}", requestId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(worker)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.applications[0].status").value("REJECTED"))
+				.andExpect(jsonPath("$.applications[0].rejectComment")
+						.value("이번 주 근무가 너무 많아요."));
+	}
+
+	@Test
+	void approvedExchangeSwapsBothWorkers() throws Exception {
+		LocalDate available = baseDate.plusDays(6);
+		Shift offered = shiftRepository.save(Shift.create(
+				store, coworker, available.atTime(12, 0), available.atTime(18, 0), "미들", owner));
+		MvcResult requestResult = createPublicRequest("EXCHANGE", available);
+		Long requestId = jsonLong(requestResult, "$.id");
+		Long applicationId = jsonLong(apply(requestId, coworker, offered.getId()), "$.id");
+		select(requestId, applicationId, offered.getId());
+
+		mockMvc.perform(put("/requests/{requestId}/approval", requestId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"decision\":\"APPROVE\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("CONFIRMED"))
+				.andExpect(jsonPath("$.shift.workerId").value(coworker.getId()));
+
+		mockMvc.perform(get("/requests/{requestId}", requestId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(worker)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.applications[0].selectedOfferShift.workerId").value(worker.getId()));
+	}
+
+	@Test
+	void openShiftSelectionConfirmsImmediately() throws Exception {
+		MvcResult urgent = mockMvc.perform(post("/stores/{storeId}/open-shifts", store.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{
+						  "startAt":"%sT10:00:00","endAt":"%sT16:00:00",
+						  "position":"오픈","scope":"STORE","notifyUserIds":[%d]
+						}
+						""".formatted(baseDate.plusDays(2), baseDate.plusDays(2), coworker.getId())))
+				.andExpect(status().isCreated())
+				.andReturn();
+		Long requestId = jsonLong(urgent, "$.request.id");
+		Long applicationId = jsonLong(apply(requestId, coworker, null), "$.id");
+
+		mockMvc.perform(put("/requests/{requestId}/selection", requestId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"applicationId":%d}
+						""".formatted(applicationId)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("CONFIRMED"))
+				.andExpect(jsonPath("$.shift.workerName").value("이진호"));
+	}
+
 	private MvcResult createPublicRequest(String type, LocalDate availableDate) throws Exception {
 		String dates = availableDate == null
 				? ""
@@ -348,6 +478,33 @@ class RequestApiIntegrationTest {
 						""".formatted(type, workerShift.getId(), dates)))
 				.andExpect(status().isCreated())
 				.andReturn();
+	}
+
+	private MvcResult apply(Long requestId, User applicant, Long offeredShiftId) throws Exception {
+		String offers = offeredShiftId == null
+				? ""
+				: "\"offeredShiftIds\":[" + offeredShiftId + "],";
+		return mockMvc.perform(post("/requests/{requestId}/applications", requestId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(applicant))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{" + offers + "\"message\":\"지원할게요\"}"))
+				.andExpect(status().isCreated())
+				.andReturn();
+	}
+
+	private void select(Long requestId, Long applicationId, Long offerShiftId) throws Exception {
+		String offer = offerShiftId == null ? "" : ",\"offerShiftId\":" + offerShiftId;
+		mockMvc.perform(put("/requests/{requestId}/selection", requestId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(worker))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"applicationId\":" + applicationId + offer + "}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("PENDING_APPROVAL"));
+	}
+
+	private Long jsonLong(MvcResult result, String path) throws Exception {
+		return ((Number) com.jayway.jsonpath.JsonPath.read(
+				result.getResponse().getContentAsString(), path)).longValue();
 	}
 
 	private void activate(User user, MemberRole role) {

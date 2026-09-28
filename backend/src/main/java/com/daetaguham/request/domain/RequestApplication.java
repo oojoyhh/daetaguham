@@ -123,6 +123,32 @@ public class RequestApplication {
 		respondedAt = LocalDateTime.now();
 	}
 
+	public void markNotSelected() {
+		if (status == ApplicationStatus.APPLIED
+				|| status == ApplicationStatus.PROPOSED
+				|| status == ApplicationStatus.SELECTED) {
+			status = ApplicationStatus.NOT_SELECTED;
+			respondedAt = LocalDateTime.now();
+		}
+	}
+
+	public void reject(User decider, String comment) {
+		if (status != ApplicationStatus.SELECTED) {
+			throw new IllegalStateException("선택된 지원만 반려할 수 있어요.");
+		}
+		status = ApplicationStatus.REJECTED;
+		decidedBy = Objects.requireNonNull(decider);
+		rejectComment = Objects.requireNonNull(comment);
+		respondedAt = LocalDateTime.now();
+	}
+
+	public void approveBy(User decider) {
+		if (status != ApplicationStatus.SELECTED) {
+			throw new IllegalStateException("선택된 지원만 승인할 수 있어요.");
+		}
+		decidedBy = Objects.requireNonNull(decider);
+	}
+
 	@PrePersist
 	void assignCreatedAt() {
 		if (createdAt == null) {

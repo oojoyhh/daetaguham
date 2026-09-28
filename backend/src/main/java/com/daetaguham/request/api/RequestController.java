@@ -20,13 +20,16 @@ public class RequestController {
 
 	private final RequestService requestService;
 	private final com.daetaguham.request.application.ApplicationService applicationService;
+	private final com.daetaguham.request.application.RequestResolutionService resolutionService;
 
 	public RequestController(
 			RequestService requestService,
-			com.daetaguham.request.application.ApplicationService applicationService
+			com.daetaguham.request.application.ApplicationService applicationService,
+			com.daetaguham.request.application.RequestResolutionService resolutionService
 	) {
 		this.requestService = requestService;
 		this.applicationService = applicationService;
+		this.resolutionService = resolutionService;
 	}
 
 	@PostMapping("/requests/{requestId}/applications")
@@ -120,6 +123,18 @@ public class RequestController {
 				request.switchToPublic(),
 				request.scope()
 		));
+	}
+
+	@PutMapping("/requests/{requestId}/selection")
+	public RequestDetailResponse selectApplication(
+			@AuthenticationPrincipal Jwt jwt,
+			@PathVariable Long requestId,
+			@Valid @RequestBody SelectionRequest request
+	) {
+		Long actorId = Long.valueOf(jwt.getSubject());
+		resolutionService.select(
+				actorId, requestId, request.applicationId(), request.offerShiftId());
+		return RequestDetailResponse.from(requestService.find(actorId, requestId));
 	}
 
 	@PostMapping("/stores/{storeId}/open-shifts")

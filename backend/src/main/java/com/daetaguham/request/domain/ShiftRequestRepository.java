@@ -2,6 +2,7 @@ package com.daetaguham.request.domain;
 
 import java.util.Collection;
 import java.util.Optional;
+import java.util.List;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -21,4 +22,11 @@ public interface ShiftRequestRepository extends JpaRepository<ShiftRequest, Long
 	long countByShift_Store_IdAndStatus(Long storeId, RequestStatus status);
 
 	long countByShift_Store_IdAndTypeAndStatus(Long storeId, RequestType type, RequestStatus status);
+
+	@EntityGraph(attributePaths = {"shift", "shift.store", "shift.worker", "requester"})
+	List<ShiftRequest> findAllByShift_Store_IdAndStatusOrderByCreatedAtAsc(
+			Long storeId, RequestStatus status);
+
+	@EntityGraph(attributePaths = {"shift", "shift.store", "shift.worker", "requester"})
+	List<ShiftRequest> findAllByShift_IdAndStatusIn(Long shiftId, Collection<RequestStatus> statuses);
 }

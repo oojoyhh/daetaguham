@@ -2,6 +2,7 @@ package com.daetaguham.request.domain;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Collection;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -19,6 +20,11 @@ public interface RequestApplicationRepository extends JpaRepository<RequestAppli
 	boolean existsByRequest_IdAndApplicant_Id(Long requestId, Long applicantId);
 
 	boolean existsByRequest_IdAndStatus(Long requestId, ApplicationStatus status);
+
+	@EntityGraph(attributePaths = {"applicant", "request", "selectedOfferShift", "selectedOfferShift.store", "selectedOfferShift.worker"})
+	Optional<RequestApplication> findByRequest_IdAndStatus(Long requestId, ApplicationStatus status);
+
+	long countByRequest_IdAndStatusIn(Long requestId, Collection<ApplicationStatus> statuses);
 
 	@EntityGraph(attributePaths = {"applicant", "request", "request.shift", "request.shift.store"})
 	@Query("select application from RequestApplication application where application.id = :id")

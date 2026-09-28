@@ -86,6 +86,10 @@ public class Shift {
 		this.position = position;
 	}
 
+	public void assignWorker(User worker) {
+		this.worker = Objects.requireNonNull(worker);
+	}
+
 	@PrePersist
 	void assignCreatedAt() {
 		if (createdAt == null) {

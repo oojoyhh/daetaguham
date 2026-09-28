@@ -115,6 +115,21 @@ public class ShiftRequest {
 		this.scope = Objects.requireNonNull(scope);
 	}
 
+	public void reopenAfterRejection() {
+		if (status != RequestStatus.PENDING_APPROVAL) {
+			throw new IllegalStateException("승인 대기 중인 요청만 다시 모집할 수 있어요.");
+		}
+		status = RequestStatus.OPEN;
+	}
+
+	public void confirm() {
+		if (status != RequestStatus.OPEN && status != RequestStatus.PENDING_APPROVAL) {
+			throw new IllegalStateException("진행 중인 요청만 확정할 수 있어요.");
+		}
+		status = RequestStatus.CONFIRMED;
+		confirmedAt = LocalDateTime.now();
+	}
+
 	@PrePersist
 	void assignCreatedAt() {
 		if (createdAt == null) {

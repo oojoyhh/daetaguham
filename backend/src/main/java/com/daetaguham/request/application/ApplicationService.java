@@ -186,6 +186,11 @@ public class ApplicationService {
 	}
 
 	@Transactional(readOnly = true)
+	public ApplicationView findView(Long applicationId) {
+		return toView(findApplication(applicationId));
+	}
+
+	@Transactional(readOnly = true)
 	public boolean hasActiveProposal(Long requestId) {
 		return applicationRepository.existsByRequest_IdAndStatus(requestId, ApplicationStatus.PROPOSED);
 	}
