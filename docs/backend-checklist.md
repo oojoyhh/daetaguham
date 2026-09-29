@@ -1,6 +1,6 @@
 # 백엔드 개발 체크리스트
 
-> 최종 갱신: 2026-09-28
+> 최종 갱신: 2026-09-29
 > 현재 DB 구현: 설계된 12개 테이블 전체 (`users`, `stores`, `store_members`, `shift_templates`, `shifts`, `availabilities`, `store_notices`, `shift_requests`, `request_available_dates`, `request_applications`, `application_offer_shifts`, `notifications`)
 
 ## 1. 프로젝트 기반
@@ -9,8 +9,8 @@
 - [x] PostgreSQL 17 Docker 개발 환경
 - [x] Flyway 마이그레이션
 - [x] 공통 오류 응답과 통합 테스트 기반
-- [ ] 배포용 환경변수·프로필 분리
-- [ ] CI에서 자동 테스트 실행
+- [x] 배포용 환경변수·Dockerfile·Render Blueprint 구성
+- [x] GitHub Actions에서 백엔드 전체 테스트 자동 실행
 
 ## 2. 회원·인증
 
@@ -96,10 +96,12 @@
 - [x] 요청 게시판·내 활동·요청 상세 API 연결
 - [x] 공개 요청 지원·철회와 지원자 선택·요청 취소 API 연결
 - [x] 받은 지정 제안 조회와 수락·거절 API 연결
+- [x] 사장·점장 월간 근무표·급구·승인·오늘 현황 API 연결
+- [x] 직원·점장·사장 알림 조회와 읽음 처리 API 연결
 - [ ] 현재 HTML 프로토타입의 `localStorage`를 실제 API로 교체
 - [ ] 로딩·빈 화면·에러·권한 상태 처리
-- [ ] 핵심 사용자 흐름 E2E 테스트
-- [ ] 백엔드·PostgreSQL 배포
+- [x] 회원가입부터 대타 승인·근무표·알림 반영까지 핵심 사용자 흐름 E2E 테스트
+- [ ] Render에서 백엔드·PostgreSQL Blueprint 실제 생성
 - [ ] 프론트엔드 배포 URL과 백엔드 API 연결
 - [ ] README에 데모 URL·테스트 계정·아키텍처 추가
 
