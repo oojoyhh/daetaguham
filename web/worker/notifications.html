@@ -35,6 +35,7 @@
     </header>
 
     <main class="content">
+      <p class="error-text" id="notificationError" hidden></p>
       <section class="card store-messages" id="storeMessages" aria-labelledby="storeMessageTitle">
         <div class="store-message-head">
           <h2 id="storeMessageTitle">매장 전달사항</h2>
@@ -55,7 +56,8 @@
 
   <script src="../js/common.js"></script>
   <script>
-    // 역할별 예시 알림. 점장·사장은 ?role=manager / ?role=owner 로 같은 화면을 써요.
+    const LIVE_MODE = DaetaguhamApi.isSignedIn();
+    // 로그아웃 상태의 포트폴리오 화면에서도 역할별 흐름을 확인할 수 있는 예시 알림이에요.
     const NOTIS_BY_ROLE = {
       manager: [
         { id: 11, day: "today", ic: "req", mark: "승", text: "박유진님 → 김민님 대타 승인 요청", sub: "9/19(토) 14:00–22:00 · 14:02", href: "../manager/approvals.html", unread: true },
@@ -80,48 +82,170 @@
     ];
 
     const role = params.get("role");
-    const NOTIS = NOTIS_BY_ROLE[role] || WORKER_NOTIS;
+    let notifications = LIVE_MODE ? [] : (NOTIS_BY_ROLE[role] || WORKER_NOTIS);
+    let storeNotices = [];
+    let unreadCount = LIVE_MODE ? 0 : notifications.filter((notification) => notification.unread).length;
+    let readAllBusy = false;
     if (NOTIS_BY_ROLE[role]) document.title = `알림 | ${role === "owner" ? "사장" : "점장"}`;
+
+    const localISO = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    const todayISO = LIVE_MODE ? localISO(new Date()) : TODAY;
+    const typeUI = {
+      REQUEST_OPENED: { ic: "req", mark: "요" },
+      OPEN_SHIFT_POSTED: { ic: "gg", mark: "급" },
+      PROPOSAL_RECEIVED: { ic: "req", mark: "제" },
+      APPLICATION_NEW: { ic: "req", mark: "지" },
+      APPROVAL_NEEDED: { ic: "req", mark: "승" },
+      CONFIRMED: { ic: "ok", mark: "✓" },
+      REJECTED: { ic: "bad", mark: "✕" },
+      EXPIRED: { ic: "bad", mark: "끝" },
+      MEMBER_REQUEST: { ic: "gg", mark: "참" },
+    };
+
+    function notificationHref(notification) {
+      const requestId = notification.requestId;
+      const storeId = notification.storeId;
+      const storeQuery = storeId ? `store=${encodeURIComponent(storeId)}` : "";
+      const roleStoreQuery = [role === "owner" ? "role=owner" : "", storeQuery].filter(Boolean).join("&");
+      switch (notification.type) {
+        case "APPROVAL_NEEDED":
+          return `../manager/approvals.html${roleStoreQuery ? `?${roleStoreQuery}` : ""}`;
+        case "MEMBER_REQUEST":
+          return `../manager/staff.html${roleStoreQuery ? `?${roleStoreQuery}` : ""}`;
+        case "REQUEST_OPENED":
+        case "OPEN_SHIFT_POSTED":
+          return requestId ? `apply.html?id=${requestId}` : "board.html";
+        case "APPLICATION_NEW":
+        case "REJECTED":
+        case "EXPIRED":
+          return requestId ? `request.html?id=${requestId}` : "board.html?tab=mine";
+        case "PROPOSAL_RECEIVED":
+        case "CONFIRMED":
+        default:
+          return "home.html";
+      }
+    }
+
+    function normalize(notification) {
+      const createdDate = notification.createdAt.slice(0, 10);
+      const ui = typeUI[notification.type] || { ic: "req", mark: "알" };
+      return {
+        id: notification.id,
+        type: notification.type,
+        day: createdDate === todayISO ? "today" : "before",
+        ic: ui.ic,
+        mark: ui.mark,
+        text: notification.message,
+        sub: createdDate === todayISO
+          ? notification.createdAt.slice(11, 16)
+          : fmtDate(createdDate),
+        href: notificationHref(notification),
+        unread: !notification.isRead,
+      };
+    }
+
+    function showError(message = "") {
+      const error = document.getElementById("notificationError");
+      error.hidden = !message;
+      error.textContent = message;
+    }
 
     function renderStoreMessages() {
       const section = document.getElementById("storeMessages");
       if (role) { section.hidden = true; return; }
-      // 내가 속한 매장 것만 본다 (한석휘는 건대점 소속)
-      const stores = { B: "건대점" };
-      const notices = Object.keys(stores).flatMap((store) =>
-        getStoreNotices(store)
+      if (!LIVE_MODE) {
+        storeNotices = getStoreNotices("B")
           .filter((notice) => notice.noticeDate >= TODAY)
-          .map((notice) => ({ ...notice, store }))
-      ).sort((a, b) => a.noticeDate.localeCompare(b.noticeDate));
-      document.getElementById("storeMessageList").innerHTML = notices.length ? notices.map((notice) => `
+          .map((notice) => ({ ...notice, storeName: "건대점" }));
+      }
+      const sorted = [...storeNotices].sort((a, b) => a.noticeDate.localeCompare(b.noticeDate));
+      document.getElementById("storeMessageList").innerHTML = sorted.length ? sorted.map((notice) => `
         <div class="store-message">
           <time datetime="${notice.noticeDate}">${fmtDate(notice.noticeDate).split("(")[0]}</time>
-          <span><p>${escapeHTML(notice.content)}</p><small>${stores[notice.store]} · ${notice.createdByName}</small></span>
+          <span><p>${escapeHTML(notice.content)}</p><small>${escapeHTML(notice.storeName)} · ${escapeHTML(notice.createdByName)}</small></span>
         </div>`).join("") : `<p class="empty">새로운 전달사항이 없어요.</p>`;
     }
 
     function render() {
       ["today", "before"].forEach((day) => {
-        document.getElementById(day).innerHTML = NOTIS.filter((n) => n.day === day).map((n) => `
+        const items = notifications.filter((notification) => notification.day === day);
+        document.getElementById(day).innerHTML = items.length ? items.map((n) => `
           <a class="list-item noti ${n.unread ? "unread" : "read"}" href="${n.href}" data-id="${n.id}">
             <span class="ic ${n.ic}" aria-hidden="true">${n.mark}</span>
-            <div class="grow"><p class="title">${n.text}</p><p class="desc num">${n.sub}</p></div>
-          </a>`).join("");
+            <div class="grow"><p class="title">${escapeHTML(n.text)}</p><p class="desc num">${escapeHTML(n.sub)}</p></div>
+          </a>`).join("") : `<p class="empty">${day === "today" ? "오늘 온 알림이 없어요." : "이전 알림이 없어요."}</p>`;
       });
+      unreadCount = notifications.filter((notification) => notification.unread).length;
+      const button = document.getElementById("readAll");
+      button.disabled = unreadCount === 0 || readAllBusy;
+      button.textContent = unreadCount ? `모두 읽음 (${unreadCount})` : "모두 읽음";
     }
 
-    document.querySelector("main").addEventListener("click", (e) => {
-      const a = e.target.closest("[data-id]");
-      if (a) NOTIS.find((n) => n.id === Number(a.dataset.id)).unread = false;
-    });
-    document.getElementById("readAll").addEventListener("click", () => {
-      NOTIS.forEach((n) => (n.unread = false));
+    document.querySelector("main").addEventListener("click", async (event) => {
+      const link = event.target.closest("[data-id]");
+      if (!link) return;
+      const notification = notifications.find((item) => String(item.id) === link.dataset.id);
+      if (!notification?.unread) return;
+      event.preventDefault();
+      notification.unread = false;
       render();
-      toast("모두 읽음으로 표시했어요");
+      if (LIVE_MODE) {
+        try {
+          await DaetaguhamApi.request(`/me/notifications/${notification.id}/read`, { method: "PUT" });
+        } catch (error) {
+          notification.unread = true;
+          render();
+          toast(error.message);
+        }
+      }
+      location.href = link.href;
     });
 
-    renderStoreMessages();
-    render();
+    document.getElementById("readAll").addEventListener("click", async () => {
+      if (readAllBusy || unreadCount === 0) return;
+      readAllBusy = true;
+      render();
+      try {
+        if (LIVE_MODE) {
+          await DaetaguhamApi.request("/me/notifications/read-all", { method: "PUT" });
+        }
+        notifications.forEach((notification) => (notification.unread = false));
+        toast("모두 읽음으로 표시했어요");
+      } catch (error) {
+        toast(error.message);
+      } finally {
+        readAllBusy = false;
+        render();
+      }
+    });
+
+    async function initialize() {
+      if (!LIVE_MODE) {
+        renderStoreMessages();
+        render();
+        return;
+      }
+      showError();
+      document.getElementById("today").innerHTML = `<p class="empty">알림을 불러오는 중이에요…</p>`;
+      document.getElementById("before").innerHTML = "";
+      document.getElementById("readAll").disabled = true;
+      try {
+        const requests = [DaetaguhamApi.request("/me/notifications?page=1&size=100")];
+        if (!role) requests.push(DaetaguhamApi.request("/me/store-notices"));
+        const [result, noticeResult = []] = await Promise.all(requests);
+        notifications = result.content.map(normalize);
+        unreadCount = result.unreadCount;
+        storeNotices = noticeResult;
+        renderStoreMessages();
+        render();
+      } catch (error) {
+        showError(error.message);
+        document.getElementById("today").innerHTML = `<p class="empty">알림을 불러오지 못했어요.</p>`;
+        document.getElementById("before").innerHTML = "";
+      }
+    }
+
+    initialize();
   </script>
 </body>
 </html>
