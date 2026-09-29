@@ -29,6 +29,7 @@
       <main class="content">
         <div class="segmented" id="storeSwitch" hidden></div>
         <p class="help" style="padding:0 4px">직원끼리 합의한 대타·교대예요. 눌러서 확인해 주세요.</p>
+        <p class="error-text" id="listError" hidden></p>
         <section class="card tight" id="list"></section>
         <span class="api-tag">GET /stores/{id}/approvals</span>
       </main>
@@ -66,46 +67,41 @@
 
   <script src="../js/common.js"></script>
   <script>
-    // 예시 데이터 (GET /stores/{id}/approvals 응답이라고 가정). 사장은 ?role=owner로 매장을 전환해요.
-    const STORE_APPROVALS = { A: [
+    const LIVE_MODE = DaetaguhamApi.isSignedIn();
+    const isOwner = params.get("role") === "owner";
+    const SAMPLE_STORES = [
+      { storeId: "A", storeName: "성수점" },
+      { storeId: "B", storeName: "건대점" },
+    ];
+    const SAMPLE_APPROVALS = { A: [
       {
         id: 3021, type: "대타", from: "박유진", to: "김민", when: "9/19(토) 14:00–22:00", scheduleDate: "2026-09-19",
-        days: [{ name: "9/19(토)", rows: [
-          { who: "박유진", s: 14, e: 22, kind: "gone" },
-          { who: "김민", s: 14, e: 22, kind: "new" },
-        ] }],
-        checks: [
-          { k: "ok", t: "김민님은 그 시간에 다른 근무가 없어요" },
-          { k: "ok", t: "김민님 이번 주 12시간 → 20시간" },
-        ],
-        status: "PENDING",
+        days: [{ name: "9/19(토)", rows: [{ who: "박유진", start: "14:00", end: "22:00", kind: "gone" }, { who: "김민", start: "14:00", end: "22:00", kind: "new" }] }],
+        checks: [{ k: "ok", t: "김민님은 그 시간에 다른 근무가 없어요" }, { k: "ok", t: "승인할 때 근무 겹침을 다시 확인해요" }], status: "PENDING",
       },
       {
-        id: 3018, type: "교대", from: "정재웅", to: "김민", when: "9/21(월) ⇄ 9/24(목) 오픈",
+        id: 3018, type: "교대", from: "정재웅", to: "김민", when: "9/21(월) ⇄ 9/24(목) 오픈", scheduleDate: "2026-09-21",
         days: [
-          { name: "9/21(월)", rows: [{ who: "정재웅", s: 10, e: 16, kind: "gone" }, { who: "김민", s: 10, e: 16, kind: "new" }] },
-          { name: "9/24(목)", rows: [{ who: "김민", s: 10, e: 16, kind: "gone" }, { who: "정재웅", s: 10, e: 16, kind: "new" }] },
-        ],
-        checks: [{ k: "ok", t: "두 사람 모두 바뀐 날에 다른 근무가 없어요" }],
-        status: "PENDING",
+          { name: "9/21(월)", rows: [{ who: "정재웅", start: "10:00", end: "16:00", kind: "gone" }, { who: "김민", start: "10:00", end: "16:00", kind: "new" }] },
+          { name: "9/24(목)", rows: [{ who: "김민", start: "10:00", end: "16:00", kind: "gone" }, { who: "정재웅", start: "10:00", end: "16:00", kind: "new" }] },
+        ], checks: [{ k: "ok", t: "두 사람 모두 바뀐 날에 다른 근무가 없어요" }], status: "PENDING",
       },
       {
-        id: 3024, type: "대타", from: "이진호", to: "정재웅", when: "9/27(일) 16:00–22:00",
-        days: [{ name: "9/27(일)", rows: [
-          { who: "이진호", s: 16, e: 22, kind: "gone" },
-          { who: "정재웅", s: 16, e: 22, kind: "new" },
-        ] }],
-        checks: [
-          { k: "ok", t: "정재웅님은 그 시간에 다른 근무가 없어요" },
-          { k: "warn", t: "정재웅님 이번 주 28시간 → 34시간 (30시간 넘음)" },
-        ],
-        status: "PENDING",
+        id: 3024, type: "대타", from: "이진호", to: "정재웅", when: "9/27(일) 16:00–22:00", scheduleDate: "2026-09-27",
+        days: [{ name: "9/27(일)", rows: [{ who: "이진호", start: "16:00", end: "22:00", kind: "gone" }, { who: "정재웅", start: "16:00", end: "22:00", kind: "new" }] }],
+        checks: [{ k: "ok", t: "정재웅님은 그 시간에 다른 근무가 없어요" }, { k: "warn", t: "승인 후 이번 주 근무가 30시간을 넘어요" }], status: "PENDING",
       },
     ], B: [] };
+    const session = DaetaguhamApi.getSession();
+    let stores = LIVE_MODE
+      ? (session.stores || []).filter((store) =>
+          store.myRole === (isOwner ? "OWNER" : "MANAGER") && (!store.memberStatus || store.memberStatus === "ACTIVE"))
+      : SAMPLE_STORES;
+    let approvalCache = new Map();
+    let storeKey = "";
+    let approvals = [];
     let current = null;
-    let storeKey = mountStoreSwitch((k) => { storeKey = k; approvals = STORE_APPROVALS[k]; renderList(); show("list"); });
-    if (params.get("role") !== "owner") storeKey = "A";
-    let approvals = STORE_APPROVALS[storeKey];
+    let busy = false;
 
     const STATUS_PILL = {
       PENDING: `<span class="pill wait">대기</span>`,
@@ -113,46 +109,92 @@
       REJECTED: `<span class="pill bad">반려</span>`,
     };
 
+    const typeLabel = (type) => type === "EXCHANGE" ? "교대" : type === "COVER" ? "대타" : type;
+    const timePart = (dateTime) => dateTime.slice(11, 16);
+    const hourValue = (time) => {
+      const [hour, minute] = time.split(":").map(Number);
+      return hour + minute / 60;
+    };
+    const storeInfo = () => stores.find((store) => String(store.storeId) === String(storeKey));
+
+    function normalize(item) {
+      const request = item.request;
+      const application = item.selectedApplication;
+      const type = typeLabel(request.type);
+      const days = item.changes.map((change) => ({
+        name: fmtDate(change.date),
+        rows: [
+          { who: change.before.workerName || "미정", start: timePart(change.before.startAt), end: timePart(change.before.endAt), kind: "gone" },
+          { who: change.after.workerName || "미정", start: timePart(change.after.startAt), end: timePart(change.after.endAt), kind: "new" },
+        ],
+      }));
+      const original = item.changes[0];
+      const when = request.type === "EXCHANGE"
+        ? `${item.changes.map((change) => fmtDate(change.date)).join(" ⇄ ")} · ${original.before.position}`
+        : `${fmtDate(original.date)} ${timePart(original.before.startAt)}–${timePart(original.before.endAt)} · ${original.before.position}`;
+      return {
+        id: request.id,
+        type,
+        from: request.requesterName,
+        to: application.applicantName,
+        when,
+        requestReason: request.reason || "개인 사정",
+        scheduleDate: request.shift.startAt.slice(0, 10),
+        days,
+        checks: item.checks.map((check) => ({ k: check.level === "OK" ? "ok" : "warn", t: check.message })),
+        status: "PENDING",
+      };
+    }
+
+    function showListError(message = "") {
+      const error = document.getElementById("listError");
+      error.hidden = !message;
+      error.textContent = message;
+    }
+
+    function renderStoreSwitch() {
+      const box = document.getElementById("storeSwitch");
+      if (stores.length < 2) { box.hidden = true; return; }
+      box.hidden = false;
+      box.setAttribute("role", "group");
+      box.setAttribute("aria-label", "매장 선택");
+      box.innerHTML = stores.map((store) =>
+        `<button type="button" data-store-id="${store.storeId}" aria-pressed="${String(store.storeId) === String(storeKey)}">${escapeHTML(store.storeName)}</button>`
+      ).join("");
+    }
+
     function renderList() {
       document.getElementById("list").innerHTML = approvals.length === 0
-        ? `<p class="empty">${storeKey === "B" ? "건대점은 합의하면 바로 확정되는 매장이라 승인할 요청이 없어요" : "승인할 요청이 없어요"}</p>`
+        ? `<p class="empty">승인할 요청이 없어요</p>`
         : approvals.map((a) => `
         <button class="list-item" type="button" data-id="${a.id}">
           <div class="grow">
-            <p class="title">${a.type} · ${a.from} ${a.type === "교대" ? "⇄" : "→"} ${a.to}</p>
-            <p class="desc num">${a.when}</p>
+            <p class="title">${escapeHTML(a.type)} · ${escapeHTML(a.from)} ${a.type === "교대" ? "⇄" : "→"} ${escapeHTML(a.to)}</p>
+            <p class="desc num">${escapeHTML(a.when)}</p>
           </div>
           ${STATUS_PILL[a.status]}<span class="chev" aria-hidden="true">›</span>
         </button>`).join("");
-      const n = Object.values(STORE_APPROVALS).flat().filter((a) => a.status === "PENDING").length;
-      document.querySelectorAll(".account-meta small").forEach((el) => {
-        if (params.get("role") === "owner") el.textContent = `${OWNER_STORE_NAMES[storeKey]} 승인`;
-      });
+      const n = [...approvalCache.values()].flat().filter((a) => a.status === "PENDING").length;
+      document.querySelectorAll(".account-meta small").forEach((element) =>
+        (element.textContent = `${storeInfo()?.storeName || "매장"} 승인`));
       const count = document.querySelector('[data-count-for="approvals"]');
       if (count) { count.textContent = n; count.hidden = n === 0; }
-    }
-
-    // 사장이 들어오면 (?role=owner) 헤더 계정 정보를 사장 화면에 맞게 표시
-    if (params.get("role") === "owner") {
-      document.querySelectorAll(".account-meta").forEach((meta) => {
-        meta.innerHTML = "<b>김효주 사장님</b><small>2개 매장 운영</small>";
-      });
-      document.title = "승인 | 사장";
+      renderStoreSwitch();
     }
 
     function timeline(day) {
-      const min = Math.min(...day.rows.map((r) => r.s));
-      const start = Math.max(8, Math.min(min, 10));
+      const min = Math.floor(Math.min(...day.rows.map((row) => hourValue(row.start))));
+      const start = Math.max(0, Math.min(min, 12));
       const hours = Array.from({ length: 12 }, (_, i) => start + i);
       return `
         <div>
-          <p class="day-name">${day.name}</p>
+          <p class="day-name">${escapeHTML(day.name)}</p>
           <div class="tl">
             <div class="tl-hours"><span></span>${hours.map((h) => `<span>${h}</span>`).join("")}</div>
             ${day.rows.map((r) => `
               <div class="tl-row">
-                <span class="tl-who">${r.who}</span>
-                <div class="tl-blk ${r.kind}" style="grid-column:${r.s - start + 2} / ${Math.min(r.e, start + 12) - start + 2}">${pad(r.s)}–${pad(r.e)}</div>
+                <span class="tl-who">${escapeHTML(r.who)}</span>
+                <div class="tl-blk ${r.kind}" style="grid-column:${Math.floor(hourValue(r.start)) - start + 2} / ${Math.min(Math.ceil(hourValue(r.end)), start + 12) - start + 2}">${r.start}–${r.end}</div>
               </div>`).join("")}
           </div>
         </div>`;
@@ -170,8 +212,10 @@
                   </div>
                   <span class="api-tag">PUT /requests/{id}/approval</span>`;
       } else if (a.status === "APPROVED") {
+        const scheduleParams = new URLSearchParams({ store: String(storeKey) });
+        if (isOwner) scheduleParams.set("role", "owner");
         const scheduleLink = a.scheduleDate
-          ? `<a class="btn btn-primary btn-block" href="schedule.html?date=${a.scheduleDate}&approved=${a.id}&from=${encodeURIComponent(a.from)}&to=${encodeURIComponent(a.to)}">${fmtDate(a.scheduleDate)} 근무표에서 확인</a>`
+          ? `<a class="btn btn-primary btn-block" href="schedule-bulk.html?${scheduleParams.toString()}">${fmtDate(a.scheduleDate)} 월간 근무표에서 확인</a>`
           : "";
         bottom = `<div class="notice ok">승인했어요. 근무표와 두 사람의 캘린더에 반영됐어요.</div>${scheduleLink}`;
       } else {
@@ -181,13 +225,14 @@
       document.getElementById("detail").innerHTML = `
         <section class="card stack" style="gap:14px">
           <div class="people">
-            <span class="avatar">${shortName(a.from)}</span>
-            <div><b>${a.from}</b><small>요청</small></div>
+            <span class="avatar">${escapeHTML(shortName(a.from))}</span>
+            <div><b>${escapeHTML(a.from)}</b><small>요청</small></div>
             <span class="arrow" aria-hidden="true">${a.type === "교대" ? "⇄" : "→"}</span>
-            <span class="avatar">${shortName(a.to)}</span>
-            <div><b>${a.to}</b><small>${a.type === "교대" ? "교대 상대" : "대신 근무"}</small></div>
+            <span class="avatar">${escapeHTML(shortName(a.to))}</span>
+            <div><b>${escapeHTML(a.to)}</b><small>${a.type === "교대" ? "교대 상대" : "대신 근무"}</small></div>
           </div>
-          <p class="big-when num">${a.when}</p>
+          <p class="big-when num">${escapeHTML(a.when)}</p>
+          <p class="muted">요청 사유 · ${escapeHTML(a.requestReason || "개인 사정")}</p>
         </section>
 
         <h2 class="section-title">근무표가 이렇게 바뀌어요</h2>
@@ -220,11 +265,35 @@
     const reason = document.getElementById("reason");
     const rejectConfirm = document.getElementById("rejectConfirm");
 
-    document.getElementById("detail").addEventListener("click", (e) => {
+    async function decide(decision, comment = null) {
+      if (busy || !current) return false;
+      busy = true;
+      if (LIVE_MODE) {
+        try {
+          const result = await DaetaguhamApi.request(`/requests/${current.id}/approval`, {
+            method: "PUT",
+            body: { decision, comment },
+          });
+          if (decision === "APPROVE" && result.status !== "CONFIRMED") throw new Error("승인 결과를 확인하지 못했어요.");
+        } catch (apiError) {
+          toast(apiError.message);
+          busy = false;
+          return false;
+        }
+      }
+      current.status = decision === "APPROVE" ? "APPROVED" : "REJECTED";
+      current.reason = comment;
+      approvalCache.set(String(storeKey), (approvalCache.get(String(storeKey)) || []).filter((item) => item.id !== current.id));
+      approvals = approvalCache.get(String(storeKey)) || [];
+      busy = false;
+      renderDetail();
+      renderList();
+      return true;
+    }
+
+    document.getElementById("detail").addEventListener("click", async (e) => {
       if (e.target.closest("#approveBtn")) {
-        current.status = "APPROVED";
-        renderDetail(); renderList();
-        toast("승인했어요");
+        if (await decide("APPROVE")) toast("승인했어요. 근무표에 반영했어요");
       }
       if (e.target.closest("#rejectBtn")) {
         reason.value = ""; rejectConfirm.disabled = true;
@@ -233,15 +302,53 @@
     });
 
     reason.addEventListener("input", () => { rejectConfirm.disabled = reason.value.trim().length < 2; });
-    rejectSheet.addEventListener("close", () => {
+    rejectSheet.addEventListener("close", async () => {
       if (rejectSheet.returnValue !== "yes") return;
-      current.status = "REJECTED";
-      current.reason = reason.value.trim();
-      renderDetail(); renderList();
-      toast(`반려했어요. ${current.from}님에게 알려드렸어요`);
+      const requester = current.from;
+      if (await decide("REJECT", reason.value.trim())) toast(`반려했어요. ${requester}님에게 알려드렸어요`);
     });
 
-    renderList();
+    document.getElementById("storeSwitch").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-store-id]");
+      if (!button || button.dataset.storeId === String(storeKey)) return;
+      storeKey = button.dataset.storeId;
+      approvals = approvalCache.get(String(storeKey)) || [];
+      current = null;
+      renderList();
+      show("list");
+    });
+
+    async function initialize() {
+      if (isOwner) document.title = "승인 | 사장";
+      if (!stores.length) {
+        showListError(isOwner ? "운영 중인 매장이 없어요." : "점장으로 승인된 매장이 없어요.");
+        document.getElementById("list").innerHTML = `<p class="empty">승인할 요청이 없어요</p>`;
+        return;
+      }
+      if (LIVE_MODE) {
+        showListError();
+        document.getElementById("list").innerHTML = `<p class="empty">승인 대기 요청을 불러오는 중이에요…</p>`;
+        try {
+          const rows = await Promise.all(stores.map(async (store) => ({
+            storeId: String(store.storeId),
+            approvals: (await DaetaguhamApi.request(`/stores/${store.storeId}/approvals`)).map(normalize),
+          })));
+          rows.forEach((row) => approvalCache.set(row.storeId, row.approvals));
+        } catch (apiError) {
+          showListError(apiError.message);
+          return;
+        }
+      } else {
+        stores.forEach((store) => approvalCache.set(String(store.storeId), SAMPLE_APPROVALS[store.storeId] || []));
+      }
+      const requestedStore = params.get("store");
+      const firstStore = stores.find((store) => String(store.storeId) === requestedStore) || stores[0];
+      storeKey = String(firstStore.storeId);
+      approvals = approvalCache.get(storeKey) || [];
+      renderList();
+    }
+
+    initialize();
   </script>
 </body>
 </html>
