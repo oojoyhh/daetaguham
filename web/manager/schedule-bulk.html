@@ -139,15 +139,16 @@
       <div class="segmented" id="storeSwitch" hidden></div>
 
       <div class="month-head">
-        <button class="icon-btn" type="button" aria-label="지난달" data-todo="예시는 10월만 짤 수 있어요">‹</button>
-        <b class="num">2026년 10월</b>
-        <button class="icon-btn" type="button" aria-label="다음 달" data-todo="예시는 10월만 짤 수 있어요">›</button>
+        <button class="icon-btn" type="button" id="prevMonth" aria-label="지난달">‹</button>
+        <b class="num" id="monthLabel">2026년 10월</b>
+        <button class="icon-btn" type="button" id="nextMonth" aria-label="다음 달">›</button>
       </div>
 
       <div class="segmented" id="scheduleView" role="group" aria-label="근무표 보기 방식">
         <button type="button" data-schedule-view="month" aria-pressed="true">월간 보기</button>
         <button type="button" data-schedule-view="edit" aria-pressed="false">주간 편집</button>
       </div>
+      <p class="error-text" id="loadError" hidden></p>
 
       <div class="month-overview" id="monthView">
         <section class="card month-calendar-card" aria-label="10월 월간 근무표">
@@ -219,7 +220,7 @@
         <div class="stat"><small>인원 부족</small><b id="statShort">0</b></div>
       </div>
 
-      <h2 class="section-title">직원별 근무량 <small>10월 누적</small></h2>
+      <h2 class="section-title">직원별 근무량 <small id="monthStatsLabel">10월 누적</small></h2>
       <section class="card people-card">
         <table class="people-table">
           <colgroup><col><col><col></colgroup>
@@ -247,9 +248,9 @@
   <dialog class="sheet" id="resetSheet">
     <div class="sheet-body">
       <h3>근무표를 초기화할까요?</h3>
-      <p>10월의 직원 배정과 담당자 미정 칸을 모두 비워요.</p>
+      <p><span id="resetMonthText">10월</span>의 직원 배정과 담당자 미정 칸을 모두 비워요.</p>
       <p class="notice gray">전달사항과 매장의 오픈·미들·마감 시간 설정은 그대로 남아요.</p>
-      <p class="muted">저장 전 근무안만 비웁니다. 요청 기록에 연결된 근무가 있으면 초기화 저장은 제한돼요.</p>
+      <p class="muted" id="resetHelp">요청 기록에 연결된 근무가 있으면 초기화가 제한될 수 있어요.</p>
     </div>
     <div class="sheet-actions">
       <button class="btn" type="button" data-close="resetSheet">취소</button>
@@ -341,7 +342,7 @@
   <!-- 저장 완료 -->
   <dialog class="sheet" id="doneSheet">
     <div class="sheet-body">
-      <h3>10월 근무표를 저장했어요</h3>
+      <h3 id="doneTitle">10월 근무표를 저장했어요</h3>
       <p id="doneText"></p>
       <p class="muted">직원들 캘린더에 바로 들어가고, 새 근무 알림이 가요.</p>
     </div>
@@ -354,7 +355,12 @@
   <script src="../js/common.js"></script>
   <script>
 
-    const Y = 2026, M = 10, LAST_DAY = 31;
+    const LIVE_MODE = DaetaguhamApi.isSignedIn();
+    const today = new Date();
+    const initialMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    let Y = LIVE_MODE ? initialMonth.getFullYear() : 2026;
+    let M = LIVE_MODE ? initialMonth.getMonth() + 1 : 10;
+    let LAST_DAY, WEEKS, ALL_DAYS, FULL_WEEK;
 
     const STORE_DATA = {
       A: { name: "성수점", staff: ["김계원", "이진호", "김민", "정재웅", "박유진"] },
@@ -414,7 +420,8 @@
     const WD = ["월", "화", "수", "목", "금", "토", "일"];
 
     // 한 달을 월요일 시작 주 블록으로 나눠요 (다른 달 날짜는 null)
-    const WEEKS = (() => {
+    function buildMonth() {
+      LAST_DAY = new Date(Y, M, 0).getDate();
       const offset = (new Date(Y, M - 1, 1).getDay() + 6) % 7;
       const out = [];
       for (let start = 1 - offset; start <= LAST_DAY; start += 7) {
@@ -423,11 +430,17 @@
           return d >= 1 && d <= LAST_DAY ? toISO(Y, M, d) : null;
         }));
       }
-      return out;
-    })();
-    const ALL_DAYS = WEEKS.flat().filter(Boolean);
-    // 한 달 채우기의 본보기가 되는 주 - 월~일이 다 있는 첫 주 (10월은 1일이 목요일이라 둘째 주)
-    const FULL_WEEK = Math.max(0, WEEKS.findIndex((w) => w.every(Boolean)));
+      WEEKS = out;
+      ALL_DAYS = WEEKS.flat().filter(Boolean);
+      FULL_WEEK = Math.max(0, WEEKS.findIndex((w) => w.every(Boolean)));
+      currentWeek = FULL_WEEK;
+      selectedMonthDate = WEEKS[FULL_WEEK].find(Boolean) || ALL_DAYS[0];
+      document.getElementById("monthLabel").textContent = `${Y}년 ${M}월`;
+      document.getElementById("monthStatsLabel").textContent = `${M}월 누적`;
+      document.getElementById("resetMonthText").textContent = `${M}월`;
+      document.getElementById("doneTitle").textContent = `${M}월 근무표를 저장했어요`;
+      document.querySelector(".month-calendar-card").setAttribute("aria-label", `${M}월 월간 근무표`);
+    }
     // 주 블록은 늘 월~일 7칸이라 칸 번호가 곧 요일 (0=월 … 6=일)
     const datesOn = (days) => WEEKS.flatMap((week) => days.map((i) => week[i]).filter(Boolean));
 
@@ -437,15 +450,21 @@
     let clashes = {}; // "시간대|날짜" → Set(이름)
     let clashNote = "";
     let shortCells = 0;
-    let currentWeek = FULL_WEEK;
-    let selectedMonthDate = WEEKS[FULL_WEEK].find(Boolean);
+    let currentWeek = 0;
+    let selectedMonthDate = null;
     let STAFF, bands, storeKey;
+    let currentStoreName = "";
+    let STAFF_IDS = new Map();
+    let STAFF_LABELS = new Map();
+    let liveStores = [];
+
+    buildMonth();
 
     const cellKey = (band, date) => `${band}|${date}`;
     const at = (band, date) => plan[cellKey(band, date)] || [];
     const overlap = (a1, a2, b1, b2) => a1 < b2 && b1 < a2;
     const bandOf = (name) => bands.find((b) => b.name === name);
-    const bandNo = (name) => Math.max(0, bands.findIndex((b) => b.name === name));
+    const bandNo = (name) => Math.max(0, bands.findIndex((b) => b.name === name)) % 3;
     const isShort = (band, date) => at(band.name, date).filter((w) => w !== NONE).length < band.need;
     const weekdayIndex = (date) => (new Date(`${date}T00:00:00`).getDay() + 6) % 7;
     const canAssign = (who, band, date) => {
@@ -456,6 +475,8 @@
     function useStore(key) {
       STAFF = STORE_DATA[key].staff;
       bands = BANDS[key];
+      currentStoreName = STORE_DATA[key].name;
+      STAFF_IDS = new Map();
       picked = STAFF[0];
       plan = {};
       document.querySelectorAll(".account-meta small").forEach((el) => (el.textContent = `${STORE_DATA[key].name} 근무표`));
@@ -468,9 +489,88 @@
       }
     }
 
-    storeKey = mountStoreSwitch((k) => { storeKey = k; useStore(k); applyPatterns(); render(); });
-    if (!isOwner) storeKey = "A";
-    useStore(storeKey);
+    function liveStoreSwitch() {
+      const box = document.getElementById("storeSwitch");
+      if (!isOwner || liveStores.length < 2) { box.hidden = true; return; }
+      box.hidden = false;
+      box.setAttribute("role", "group");
+      box.setAttribute("aria-label", "매장 선택");
+      box.innerHTML = liveStores.map((store) =>
+        `<button type="button" data-live-store="${store.storeId}" aria-pressed="${String(store.storeId) === String(storeKey)}">${escapeHTML(store.storeName)}</button>`
+      ).join("");
+    }
+
+    async function loadLiveSchedule() {
+      const error = document.getElementById("loadError");
+      error.hidden = false;
+      error.textContent = "근무표를 불러오는 중이에요…";
+      const from = ALL_DAYS[0];
+      const to = ALL_DAYS[ALL_DAYS.length - 1];
+      try {
+        const [templateRows, memberRows, shiftRows] = await Promise.all([
+          DaetaguhamApi.request(`/stores/${storeKey}/shift-templates`),
+          DaetaguhamApi.request(`/stores/${storeKey}/members`),
+          DaetaguhamApi.request(`/stores/${storeKey}/shifts?from=${from}&to=${to}`),
+        ]);
+        const activeMembers = memberRows.filter((member) => member.status === "ACTIVE" && member.role !== "OWNER");
+        const nameCounts = memberRows.reduce((counts, member) => {
+          counts[member.name] = (counts[member.name] || 0) + 1;
+          return counts;
+        }, {});
+        STAFF_IDS = new Map();
+        STAFF_LABELS = new Map();
+        memberRows.forEach((member) => {
+          const label = nameCounts[member.name] > 1 ? `${member.name} · ${member.phone.slice(-4)}` : member.name;
+          STAFF_IDS.set(label, member.userId);
+          STAFF_LABELS.set(String(member.userId), label);
+        });
+        STAFF = activeMembers.map((member) => STAFF_LABELS.get(String(member.userId)));
+        bands = templateRows.map((row) => ({
+          name: row.name, s: row.startTime.slice(0, 5), e: row.endTime.slice(0, 5), need: row.requiredCount,
+        }));
+        shiftRows.forEach((shift) => {
+          if (bands.some((band) => band.name === shift.position)) return;
+          bands.push({
+            name: shift.position,
+            s: shift.startAt.slice(11, 16),
+            e: shift.endAt.slice(11, 16),
+            need: 1,
+          });
+        });
+        plan = {};
+        shiftRows.forEach((shift) => {
+          const date = shift.startAt.slice(0, 10);
+          let label = shift.workerId == null ? NONE : STAFF_LABELS.get(String(shift.workerId));
+          if (!label && shift.workerId != null) {
+            label = `${shift.workerName || "외부 지원"} · 지원`;
+            STAFF_LABELS.set(String(shift.workerId), label);
+            STAFF_IDS.set(label, shift.workerId);
+          }
+          if (!label || !ALL_DAYS.includes(date)) return;
+          const key = cellKey(shift.position, date);
+          plan[key] = [...(plan[key] || []), label];
+        });
+        picked = STAFF[0] || NONE;
+        error.hidden = true;
+        render();
+      } catch (apiError) {
+        error.hidden = false;
+        error.textContent = apiError.message;
+        toast(apiError.message);
+      }
+    }
+
+    async function useLiveStore(key) {
+      storeKey = String(key);
+      const store = liveStores.find((item) => String(item.storeId) === storeKey);
+      currentStoreName = store?.storeName || "매장";
+      document.querySelectorAll(".account-meta small").forEach((el) => (el.textContent = `${currentStoreName} 근무표`));
+      const back = `schedule.html${isOwner ? `?role=owner&store=${encodeURIComponent(storeKey)}` : ""}`;
+      document.getElementById("backLink").href = back;
+      document.getElementById("doneLink").href = back;
+      liveStoreSwitch();
+      await loadLiveSchedule();
+    }
 
     function applyPatterns() {
       plan = {};
@@ -501,7 +601,7 @@
                 clashNote = clashNote || `${who}님이 ${fmtDate(date)}에 ${b1.name}과 ${b2.name}에 같이 들어가 있어요. 시간이 겹쳐요.`;
               }
             });
-            const hit = OTHER_STORE.find((x) => x.store !== STORE_DATA[storeKey].name && x.who === who && x.date === date && overlap(b1.s, b1.e, x.s, x.e));
+            const hit = LIVE_MODE ? null : OTHER_STORE.find((x) => x.store !== currentStoreName && x.who === who && x.date === date && overlap(b1.s, b1.e, x.s, x.e));
             if (hit) {
               mark(b1.name, date, who);
               clashNote = clashNote || `${who}님은 ${fmtDate(date)}에 ${hit.store}에서 ${hit.s}–${hit.e} 근무가 있어요.`;
@@ -513,12 +613,14 @@
 
     function renderPalette() {
       document.getElementById("palette").innerHTML =
-        STAFF.map((n) => `<button type="button" data-who="${n}" aria-pressed="${n === picked}">${n}</button>`).join("") +
+        STAFF.map((n) => `<button type="button" data-who="${escapeHTML(n)}" aria-pressed="${n === picked}">${escapeHTML(n)}</button>`).join("") +
         `<button type="button" data-who="${NONE}" aria-pressed="${picked === NONE}">담당자 미정</button>`;
       document.getElementById("pickedLabel").textContent = picked === NONE ? "담당자 미정" : picked;
       document.getElementById("availabilityHint").innerHTML = picked === NONE
         ? "담당자를 정하지 않고 <b>빈 근무</b>로 저장해요."
-        : `<b>등록된 근무 가능 시간</b> · ${AVAIL_HINT[picked] || "시간 정보 없음"}`;
+        : LIVE_MODE
+          ? "<b>저장할 때 확인</b> · 같은 직원의 겹치는 근무와 현재 소속 상태를 서버가 검사해요."
+          : `<b>등록된 근무 가능 시간</b> · ${AVAIL_HINT[picked] || "시간 정보 없음"}`;
     }
 
     function renderMonthOverview() {
@@ -528,9 +630,9 @@
         const issues = bands.filter((band) => isShort(band, date)).length;
         const shiftSummary = bands.map((band) => {
           const workers = at(band.name, date).filter((who) => who !== NONE);
-          const initials = workers.map((who) => shortName(who).slice(0, 1)).join("·");
+          const initials = workers.map((who) => escapeHTML(shortName(who).slice(0, 1))).join("·");
           return `<span class="mini-shift b${bandNo(band.name)} ${workers.length < band.need ? "missing" : ""}">
-            <i>${band.name.slice(0, 1)}</i><span>${initials || "–"}</span>
+            <i>${escapeHTML(band.name.slice(0, 1))}</i><span>${initials || "–"}</span>
           </span>`;
         }).join("");
         const fullLabel = bands.map((band) => {
@@ -538,7 +640,7 @@
           return `${band.name} ${workers.join(", ") || "미배정"}`;
         }).join(", ");
         return `<button type="button" class="month-day ${i % 7 === 6 ? "sun" : ""} ${issues ? "issue" : ""}"
-                  data-month-date="${date}" aria-pressed="${date === selectedMonthDate}" aria-label="${fmtDate(date)} ${fullLabel}">
+                  data-month-date="${date}" aria-pressed="${date === selectedMonthDate}" aria-label="${escapeHTML(`${fmtDate(date)} ${fullLabel}`)}">
           <b>${Number(date.slice(-2))}</b>
           ${shiftSummary}
         </button>`;
@@ -548,8 +650,8 @@
       document.getElementById("monthDayShifts").innerHTML = bands.map((band) => {
         const workers = at(band.name, selectedMonthDate).filter((who) => who !== NONE);
         return `<div class="month-detail-row">
-          <span class="b${bandNo(band.name)}"><b>${band.name}</b><small>${band.s}–${band.e}</small></span>
-          <b class="${workers.length < band.need ? "unfilled" : ""}">${workers.length ? workers.join(" · ") : `${band.need}명 필요`}</b>
+          <span class="b${bandNo(band.name)}"><b>${escapeHTML(band.name)}</b><small>${band.s}–${band.e}</small></span>
+          <b class="${workers.length < band.need ? "unfilled" : ""}">${workers.length ? workers.map(escapeHTML).join(" · ") : `${band.need}명 필요`}</b>
         </div>`;
       }).join("");
     }
@@ -559,11 +661,11 @@
       const list = at(band.name, date);
       const bad = clashes[k];
       const chips = list.map((who) =>
-        `<span class="chip b${bandNo(band.name)} ${who === NONE ? "none" : ""} ${bad && bad.has(who) ? "clash" : ""}" data-chip="${k}" data-name="${who}">${who === NONE ? "미정" : who}</span>`
+        `<span class="chip b${bandNo(band.name)} ${who === NONE ? "none" : ""} ${bad && bad.has(who) ? "clash" : ""}" data-chip="${escapeHTML(k)}" data-name="${escapeHTML(who)}">${who === NONE ? "미정" : escapeHTML(who)}</span>`
       ).join("");
-      return `<button type="button" class="shift-slot b${bandNo(band.name)} ${isShort(band, date) ? "short" : ""}" data-cell="${k}"
-                aria-label="${band.name} ${fmtDate(date)} ${list.join(", ") || "비어 있음"}">
-        <span class="slot-time b${bandNo(band.name)}"><b>${band.name}</b><small>${band.s.slice(0,5)}–${band.e.slice(0,5)}</small></span>
+      return `<button type="button" class="shift-slot b${bandNo(band.name)} ${isShort(band, date) ? "short" : ""}" data-cell="${escapeHTML(k)}"
+                aria-label="${escapeHTML(`${band.name} ${fmtDate(date)} ${list.join(", ") || "비어 있음"}`)}">
+        <span class="slot-time b${bandNo(band.name)}"><b>${escapeHTML(band.name)}</b><small>${band.s.slice(0,5)}–${band.e.slice(0,5)}</small></span>
         <span class="slot-workers">${chips || `<span class="slot-empty">${band.need}명 필요 · 아직 미배정</span>`}</span>
         <span class="slot-add" aria-hidden="true">+</span>
       </button>`;
@@ -619,7 +721,7 @@
       const rows = STAFF.map((n) => [n, per[n] || { n: 0, h: 0 }]).sort((a, b) => b[1].h - a[1].h);
       document.getElementById("perPerson").innerHTML = rows.map(([n, v]) => `
         <tr>
-          <td><span class="person-name"><span class="avatar">${shortName(n)}</span><b>${n}</b></span></td>
+          <td><span class="person-name"><span class="avatar">${escapeHTML(shortName(n))}</span><b>${escapeHTML(n)}</b></span></td>
           <td class="num-col">${v.n}일</td>
           <td class="num-col hours">${v.h}시간</td>
         </tr>`).join("");
@@ -657,13 +759,40 @@
     document.getElementById("editSelectedDay").addEventListener("click", editSelectedMonthDay);
     document.getElementById("openEditBtn").addEventListener("click", editSelectedMonthDay);
 
+    async function changeMonth(delta) {
+      const next = new Date(Y, M - 1 + delta, 1);
+      Y = next.getFullYear();
+      M = next.getMonth() + 1;
+      buildMonth();
+      plan = {};
+      if (LIVE_MODE) await loadLiveSchedule();
+      else { applyPatterns(); render(); }
+    }
+    document.getElementById("prevMonth").addEventListener("click", () => changeMonth(-1));
+    document.getElementById("nextMonth").addEventListener("click", () => changeMonth(1));
+
     const resetSheet = document.getElementById("resetSheet");
     document.getElementById("resetBtn").addEventListener("click", () => resetSheet.showModal());
-    document.getElementById("confirmReset").addEventListener("click", () => {
+    document.getElementById("confirmReset").addEventListener("click", async () => {
+      const button = document.getElementById("confirmReset");
+      button.disabled = true;
+      if (LIVE_MODE) {
+        try {
+          await DaetaguhamApi.request(`/stores/${storeKey}/shifts/bulk`, {
+            method: "POST",
+            body: { from: ALL_DAYS[0], to: ALL_DAYS[ALL_DAYS.length - 1], shifts: [] },
+          });
+        } catch (apiError) {
+          button.disabled = false;
+          toast(apiError.message);
+          return;
+        }
+      }
       plan = {};
+      button.disabled = false;
       resetSheet.close();
       render();
-      toast("근무 배정을 모두 초기화했어요");
+      toast(LIVE_MODE ? `${M}월 근무표를 초기화했어요` : "근무 배정을 모두 초기화했어요");
     });
 
     document.getElementById("palette").addEventListener("click", (e) => {
@@ -697,7 +826,7 @@
             toast(`${picked}님은 같은 날 ${sameDay.name} 근무와 시간이 겹쳐요`);
             return;
           }
-          const other = OTHER_STORE.find((x) => x.who === picked && x.date === date && overlap(band.s, band.e, x.s, x.e));
+          const other = LIVE_MODE ? null : OTHER_STORE.find((x) => x.who === picked && x.date === date && overlap(band.s, band.e, x.s, x.e));
           if (other) {
             toast(`${picked}님은 그 시간에 ${other.store} 근무가 있어요`);
             return;
@@ -747,10 +876,40 @@
       toast(`${fmtDate(srcDays[0])}–${fmtDate(srcDays[srcDays.length - 1])} 주를 한 달 전체에 복사했어요`);
     });
 
-    document.getElementById("copyMonth").addEventListener("click", () => {
-      applyPatterns();
-      render();
-      toast("지난달 근무 패턴을 그대로 가져왔어요");
+    document.getElementById("copyMonth").addEventListener("click", async () => {
+      if (!LIVE_MODE) {
+        applyPatterns();
+        render();
+        toast("지난달 근무 패턴을 그대로 가져왔어요");
+        return;
+      }
+      const previous = new Date(Y, M - 2, 1);
+      const py = previous.getFullYear();
+      const pm = previous.getMonth() + 1;
+      const from = toISO(py, pm, 1);
+      const to = toISO(py, pm, new Date(py, pm, 0).getDate());
+      try {
+        const previousShifts = await DaetaguhamApi.request(`/stores/${storeKey}/shifts?from=${from}&to=${to}`);
+        const patterns = new Set();
+        previousShifts.forEach((shift) => {
+          const who = shift.workerId == null ? NONE : STAFF_LABELS.get(String(shift.workerId));
+          if (who && bandOf(shift.position)) patterns.add(`${who}|${shift.position}|${weekdayIndex(shift.startAt.slice(0, 10))}`);
+        });
+        let copied = 0;
+        patterns.forEach((value) => {
+          const [who, band, day] = value.split("|");
+          datesOn([Number(day)]).forEach((date) => {
+            const key = cellKey(band, date);
+            if ((plan[key] || []).includes(who)) return;
+            plan[key] = [...(plan[key] || []), who];
+            copied += 1;
+          });
+        });
+        render();
+        toast(copied ? `지난달 패턴으로 ${copied}칸을 채웠어요` : "지난달에 불러올 근무가 없어요");
+      } catch (apiError) {
+        toast(apiError.message);
+      }
     });
 
     // ---------- 요일 패턴으로 채우기 ----------
@@ -759,16 +918,16 @@
 
     function renderPattern() {
       document.getElementById("pWho").innerHTML =
-        STAFF.map((n) => `<button type="button" data-p-who="${n}" aria-pressed="${n === pWho}">${n}</button>`).join("") +
+        STAFF.map((n) => `<button type="button" data-p-who="${escapeHTML(n)}" aria-pressed="${n === pWho}">${escapeHTML(n)}</button>`).join("") +
         `<button type="button" data-p-who="${NONE}" aria-pressed="${pWho === NONE}">담당자 미정</button>`;
       document.getElementById("pBand").innerHTML =
-        bands.map((b) => `<button type="button" data-p-band="${b.name}" aria-pressed="${b.name === pBand}">${b.name} ${b.s.slice(0, 2)}–${b.e.slice(0, 2)}</button>`).join("");
+        bands.map((b) => `<button type="button" data-p-band="${escapeHTML(b.name)}" aria-pressed="${b.name === pBand}">${escapeHTML(b.name)} ${b.s.slice(0, 2)}–${b.e.slice(0, 2)}</button>`).join("");
       document.getElementById("pDays").innerHTML =
         WD.map((d, i) => `<button type="button" data-p-day="${i}" aria-pressed="${pDays.includes(i)}">${d}</button>`).join("");
       const n = datesOn(pDays).length;
       document.getElementById("pPreview").textContent = !pDays.length
         ? "요일을 골라주세요."
-        : `${pWho} · ${pBand} · ${pDays.map((i) => WD[i]).join("·")} → 10월에 ${n}칸이 채워져요.`;
+        : `${pWho} · ${pBand} · ${pDays.map((i) => WD[i]).join("·")} → ${M}월에 ${n}칸이 채워져요.`;
     }
 
     document.getElementById("patternBtn").addEventListener("click", () => {
@@ -915,7 +1074,7 @@
       draft.push({ name: "", s: "10:00", e: "16:00", need: 1 });
       renderTimeFields();
     });
-    document.getElementById("saveTimes").addEventListener("click", () => {
+    document.getElementById("saveTimes").addEventListener("click", async () => {
       const err = document.getElementById("timeError");
       const next = [];
       for (let i = 0; i < draft.length; i += 1) {
@@ -931,20 +1090,75 @@
         next.push({ name, s, e, need });
       }
       if (!next.length) { err.textContent = "시간대가 하나는 있어야 해요."; err.hidden = false; return; }
+      const saveButton = document.getElementById("saveTimes");
+      saveButton.disabled = true;
+      let saved = next;
+      if (LIVE_MODE) {
+        try {
+          const rows = await DaetaguhamApi.request(`/stores/${storeKey}/shift-templates`, {
+            method: "PUT",
+            body: next.map((band) => ({
+              name: band.name,
+              startTime: band.s,
+              endTime: band.e,
+              requiredCount: band.need,
+            })),
+          });
+          saved = rows.map((row) => ({
+            name: row.name, s: row.startTime.slice(0, 5), e: row.endTime.slice(0, 5), need: row.requiredCount,
+          }));
+        } catch (apiError) {
+          err.textContent = apiError.message;
+          err.hidden = false;
+          saveButton.disabled = false;
+          return;
+        }
+      }
       Object.keys(plan).forEach((k) => { if (!next.some((b) => b.name === k.split("|")[0])) delete plan[k]; });
-      BANDS[storeKey] = next;
-      bands = next;
+      if (!LIVE_MODE) BANDS[storeKey] = saved;
+      bands = saved;
+      saveButton.disabled = false;
       timeSheet.close();
       render();
       toast("시간대를 바꿨어요");
     });
 
     // ---------- 저장 ----------
-    function saveNow() {
+    async function saveNow() {
       const all = Object.values(plan).flat();
       const empty = all.filter((w) => w === NONE).length;
+      let result = null;
+      const saveButtons = [document.getElementById("saveBtn"), document.getElementById("confirmSave")];
+      saveButtons.forEach((button) => (button.disabled = true));
+      if (LIVE_MODE) {
+        const shifts = Object.entries(plan).flatMap(([key, workers]) => {
+          const [position, date] = key.split("|");
+          return workers.map((worker) => ({
+            workerId: worker === NONE ? null : STAFF_IDS.get(worker),
+            date,
+            position,
+          }));
+        });
+        try {
+          result = await DaetaguhamApi.request(`/stores/${storeKey}/shifts/bulk`, {
+            method: "POST",
+            body: { from: ALL_DAYS[0], to: ALL_DAYS[ALL_DAYS.length - 1], shifts },
+          });
+          await loadLiveSchedule();
+        } catch (apiError) {
+          const error = document.getElementById("gridError");
+          error.hidden = false;
+          error.textContent = apiError.message;
+          toast(apiError.message);
+          saveButtons.forEach((button) => (button.disabled = false));
+          return;
+        }
+      }
       document.getElementById("doneText").textContent =
-        `10월 근무 ${all.length}개를 저장했어요.` + (empty ? ` 담당자 미정 ${empty}개는 급구로 올릴 수 있어요.` : "");
+        `${M}월 근무 ${all.length}개를 저장했어요.`
+        + (result ? ` 추가 ${result.created}개 · 정리 ${result.deleted}개.` : "")
+        + (empty ? ` 담당자 미정 ${empty}개는 급구로 올릴 수 있어요.` : "");
+      saveButtons.forEach((button) => (button.disabled = false));
       document.getElementById("doneSheet").showModal();
     }
 
@@ -970,8 +1184,44 @@
     document.querySelectorAll("[data-close]").forEach((b) =>
       b.addEventListener("click", () => document.getElementById(b.dataset.close).close()));
 
-    applyPatterns();
-    render();
+    document.getElementById("storeSwitch").addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-live-store]");
+      if (!button || button.dataset.liveStore === storeKey) return;
+      await useLiveStore(button.dataset.liveStore);
+    });
+
+    async function initializeSchedule() {
+      if (!LIVE_MODE) {
+        storeKey = mountStoreSwitch((key) => {
+          storeKey = key;
+          useStore(key);
+          applyPatterns();
+          render();
+        });
+        if (!isOwner) storeKey = "A";
+        useStore(storeKey);
+        applyPatterns();
+        render();
+        return;
+      }
+
+      const session = DaetaguhamApi.getSession();
+      const role = isOwner ? "OWNER" : "MANAGER";
+      liveStores = (session.stores || []).filter((store) =>
+        store.myRole === role && (!store.memberStatus || store.memberStatus === "ACTIVE")
+      );
+      if (!liveStores.length) {
+        const error = document.getElementById("loadError");
+        error.hidden = false;
+        error.textContent = isOwner ? "운영 중인 매장이 없어요." : "점장으로 승인된 매장이 없어요.";
+        return;
+      }
+      const requestedStore = params.get("store");
+      const firstStore = liveStores.find((store) => String(store.storeId) === requestedStore) || liveStores[0];
+      await useLiveStore(firstStore.storeId);
+    }
+
+    initializeSchedule();
   </script>
 </body>
 </html>
