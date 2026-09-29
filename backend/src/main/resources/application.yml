@@ -55,3 +55,6 @@ app:
     expiration:
       initial-delay: ${REQUEST_EXPIRATION_INITIAL_DELAY:PT30S}
       fixed-delay: ${REQUEST_EXPIRATION_FIXED_DELAY:PT1M}
+  demo:
+    seed-enabled: ${DEMO_SEED_ENABLED:false}
+    password: ${DEMO_PASSWORD:demo1234!}

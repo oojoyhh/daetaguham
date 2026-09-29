@@ -36,6 +36,10 @@ services:
         value: https://oojoyhh.github.io
       - key: HEALTH_SHOW_DETAILS
         value: never
+      - key: DEMO_SEED_ENABLED
+        value: "true"
+      - key: DEMO_PASSWORD
+        value: demo1234!
 
 databases:
   - name: daetaguham-db

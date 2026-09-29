@@ -24,6 +24,7 @@ Blueprint가 다음 항목을 자동으로 설정합니다.
 - GitHub Pages 출처 CORS 허용
 - `/api/actuator/health` 헬스체크
 - Flyway V1~V7 자동 마이그레이션
+- 첫 기동 시 포트폴리오용 데모 계정·근무·요청 데이터 1회 생성
 
 ## 3. 배포 확인과 프론트 연결
 
