@@ -33,7 +33,7 @@ Render가 실제로 발급한 웹 서비스 주소 뒤에 `/api/actuator/health`
 확인이 끝나면 `web/js/common.js`의 `DEPLOYED_API_BASE`에 다음 형식으로 실제 주소를 입력합니다.
 
 ```js
-const DEPLOYED_API_BASE = "https://실제-서비스-주소.onrender.com/api";
+const DEPLOYED_API_BASE = "https://daetaguham-api-oojoyhh.onrender.com/api";
 ```
 
 이 변경을 다시 푸시해 GitHub Pages가 갱신되면 회원가입과 로그인부터 실제 서버 모드로 동작합니다.

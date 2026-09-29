@@ -46,7 +46,7 @@
   // ---------- 실제 API·인증 ----------
   // 배포할 때는 아래 값을 실제 HTTPS 백엔드 주소로 바꿔요.
   // 사용자 입력으로 API 주소를 바꾸지 못하게 해 JWT가 임의 서버로 전송되지 않도록 합니다.
-  const DEPLOYED_API_BASE = "";
+  const DEPLOYED_API_BASE = "https://daetaguham-api-oojoyhh.onrender.com/api";
   const AUTH_KEY = "daetaguham-auth-v1";
 
   class ApiError extends Error {

@@ -140,6 +140,11 @@ GitHub에 푸시하거나 Pull Request를 열면 같은 테스트가 GitHub Acti
 ### 배포
 
 프론트엔드는 GitHub Pages, 백엔드와 PostgreSQL은 Render Blueprint로 배포합니다.
+
+- 프론트엔드: <https://oojoyhh.github.io/daetaguham/>
+- API: <https://daetaguham-api-oojoyhh.onrender.com>
+- 헬스 체크: <https://daetaguham-api-oojoyhh.onrender.com/api/actuator/health>
+
 구체적인 순서와 주의사항은 [배포 가이드](docs/deployment.md)에 정리했습니다.
 
 ## 프로젝트 구조
@@ -159,7 +164,7 @@ daetaguham/
 
 ## 다음 단계
 
-- 백엔드·PostgreSQL 배포와 운영 환경변수 분리
-- 배포된 프론트엔드에서 백엔드 API 주소 연결
+- [x] 백엔드·PostgreSQL 배포와 운영 환경변수 분리
+- [x] 배포된 프론트엔드에서 백엔드 API 주소 연결
 - 테스트 계정과 포트폴리오용 실제 데모 데이터 준비
 - 외부 AI 설명 생성기 연결(선택) 및 실패 시 규칙 설명 fallback 검증
