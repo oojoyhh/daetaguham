@@ -142,8 +142,8 @@
       const session = DaetaguhamApi.getSession();
       const stores = (session.stores || []).filter((store) => store.myRole === "OWNER");
       const list = document.getElementById("storeList");
-      document.getElementById("ownerName").textContent = `${session.user.name} 사장님`;
-      document.getElementById("ownerStoreCount").textContent = `${stores.length}개 매장 운영`;
+      document.querySelector(".account-meta b").textContent = `${session.user.name} 사장님`;
+      document.querySelector(".account-meta small").textContent = `${stores.length}개 매장 운영`;
       document.getElementById("storeDate").textContent = `${formatDate(new Date())} · 매장 ${stores.length}곳`;
 
       if (!stores.length) {

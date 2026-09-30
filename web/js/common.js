@@ -48,6 +48,8 @@
   // 사용자 입력으로 API 주소를 바꾸지 못하게 해 JWT가 임의 서버로 전송되지 않도록 합니다.
   const DEPLOYED_API_BASE = "https://daetaguham-api-oojoyhh.onrender.com/api";
   const AUTH_KEY = "daetaguham-auth-v1";
+  // Render 무료 인스턴스는 첫 요청 시 1분 이상 기동할 수 있어요.
+  const AUTH_COLD_START_TIMEOUT = 90000;
 
   class ApiError extends Error {
     constructor(message, options = {}) {
@@ -157,6 +159,7 @@
       const result = await this.request("/auth/login", {
         method: "POST",
         auth: false,
+        timeout: AUTH_COLD_START_TIMEOUT,
         body: { phone, password },
       });
       return this.saveSession(result);
@@ -166,6 +169,7 @@
       await this.request("/auth/signup", {
         method: "POST",
         auth: false,
+        timeout: AUTH_COLD_START_TIMEOUT,
         body: { name, phone, password },
       });
       return this.login(phone, password);
