@@ -1,6 +1,6 @@
 # 백엔드 개발 체크리스트
 
-> 최종 갱신: 2026-09-29
+> 최종 갱신: 2026-09-30
 > 현재 DB 구현: 설계된 12개 테이블 전체 (`users`, `stores`, `store_members`, `shift_templates`, `shifts`, `availabilities`, `store_notices`, `shift_requests`, `request_available_dates`, `request_applications`, `application_offer_shifts`, `notifications`)
 
 ## 1. 프로젝트 기반
@@ -105,10 +105,10 @@
 - [x] Render에서 백엔드·PostgreSQL Blueprint 실제 생성
 - [x] 프론트엔드 배포 URL과 백엔드 API 연결
 - [x] README에 데모 URL·테스트 계정·아키텍처 추가
+- [x] 배포 URL 기준 프론트·백엔드·사장·알바 핵심 조회 스모크 테스트 자동화
 
 ## 다음 작업 순서
 
 1. 남은 `localStorage` 전용 상태와 정적 샘플 텍스트를 실제 API 데이터로 순차 교체
 2. 남은 화면의 로딩·빈 화면·에러·권한 상태 완성도 높이기
-3. 배포 URL 기준 사장→점장→알바 핵심 흐름 스모크 테스트 자동화
-4. 직원 내보내기 정리 규칙·CSV 붙여넣기·외부 AI 설명 생성기는 선택 기능으로 검토
+3. 직원 내보내기 정리 규칙·CSV 붙여넣기·외부 AI 설명 생성기는 선택 기능으로 검토

@@ -1,0 +1,34 @@
+name: Deployed smoke test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/smoke-deployed.mjs"
+      - ".github/workflows/deployed-smoke.yml"
+  workflow_run:
+    workflows: ["Deploy GitHub Pages"]
+    types: [completed]
+  schedule:
+    - cron: "17 0 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check deployed frontend and API
+        run: node scripts/smoke-deployed.mjs
