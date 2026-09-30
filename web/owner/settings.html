@@ -17,7 +17,7 @@
     </header>
 
     <main class="content">
-      <div class="segmented" role="group" aria-label="매장 선택">
+      <div class="segmented" id="storeSwitch" role="group" aria-label="매장 선택">
         <button type="button" data-store="A" aria-pressed="true">성수점</button>
         <button type="button" data-store="B" aria-pressed="false">건대점</button>
       </div>
@@ -45,6 +45,7 @@
 
       <h2 class="section-title">점장 <small>점장은 근무표·승인·직원 관리를 할 수 있어요</small></h2>
       <section class="card tight" id="managerList"></section>
+      <p class="error-text" id="settingsError" role="alert" hidden></p>
       <span class="api-tag">PUT /stores/{id}/settings · POST /stores/{id}/invite-code · PUT /stores/{id}/members/{userId}/role</span>
     </main>
 
@@ -66,17 +67,62 @@
 
   <script src="../js/common.js"></script>
   <script>
-    const STORES = {
+    const LIVE_MODE = DaetaguhamApi.isSignedIn();
+    const SAMPLE_STORES = {
       A: { name: "성수점", approval: true, code: "SEONG7",
            staff: [{ id: "gyewon", name: "김계원", manager: true }, { id: "jinho", name: "이진호" }, { id: "kimmin", name: "김민" }, { id: "jaewoong", name: "정재웅" }, { id: "yujin", name: "박유진" }] },
       B: { name: "건대점", approval: false, code: "GUNDA3",
            staff: [{ id: "seokhwi", name: "한석휘" }, { id: "yeri", name: "권예리" }, { id: "minhyeok", name: "배민혁" }, { id: "suyeon", name: "인수연" }] },
     };
-    let storeKey = "A";
-    const store = () => STORES[storeKey];
+    const session = DaetaguhamApi.getSession();
+    const ownerStores = LIVE_MODE
+      ? (session.stores || []).filter((item) => item.myRole === "OWNER" && (!item.memberStatus || item.memberStatus === "ACTIVE"))
+      : [];
+    const liveData = new Map();
+    let storeKey = LIVE_MODE ? String(ownerStores[0]?.storeId || "") : "A";
+    const store = () => LIVE_MODE ? liveData.get(storeKey) : SAMPLE_STORES[storeKey];
+
+    function showError(message = "") {
+      const error = document.getElementById("settingsError");
+      error.textContent = message;
+      error.hidden = !message;
+    }
+
+    function renderSwitch() {
+      const choices = LIVE_MODE
+        ? ownerStores.map((item) => ({ key: String(item.storeId), name: item.storeName }))
+        : Object.entries(SAMPLE_STORES).map(([key, item]) => ({ key, name: item.name }));
+      document.getElementById("storeSwitch").innerHTML = choices.map((item) => `
+        <button type="button" data-store="${escapeHTML(item.key)}" aria-pressed="${item.key === storeKey}">${escapeHTML(item.name)}</button>`).join("");
+    }
+
+    async function loadStore() {
+      if (!LIVE_MODE || !storeKey) return;
+      showError();
+      document.getElementById("managerList").innerHTML = '<div class="setting-row"><small>매장 설정을 불러오는 중이에요…</small></div>';
+      try {
+        const [detail, members] = await Promise.all([
+          DaetaguhamApi.request(`/stores/${storeKey}`),
+          DaetaguhamApi.request(`/stores/${storeKey}/members`),
+        ]);
+        liveData.set(storeKey, {
+          name: detail.name,
+          approval: detail.approvalRequired,
+          code: detail.inviteCode,
+          staff: members.filter((item) => item.status === "ACTIVE").map((item) => ({
+            id: String(item.userId), name: item.name, manager: item.role === "MANAGER",
+          })),
+        });
+        render();
+      } catch (error) {
+        showError(error.message || "매장 설정을 불러오지 못했어요.");
+      }
+    }
 
     function render() {
       const s = store();
+      renderSwitch();
+      if (!s) return;
       document.querySelectorAll("[data-store]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.store === storeKey)));
       document.getElementById("policy").checked = s.approval;
       document.getElementById("policyHelp").textContent = s.approval
@@ -95,12 +141,29 @@
           </div>`).join("");
     }
 
-    document.querySelectorAll("[data-store]").forEach((b) => b.addEventListener("click", () => { storeKey = b.dataset.store; render(); }));
+    document.getElementById("storeSwitch").addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-store]");
+      if (!button || button.dataset.store === storeKey) return;
+      storeKey = button.dataset.store;
+      if (LIVE_MODE && !liveData.has(storeKey)) await loadStore(); else render();
+    });
 
-    document.getElementById("policy").addEventListener("change", (e) => {
-      store().approval = e.target.checked;
-      render();
-      toast(e.target.checked ? `${store().name}: 승인 후 확정으로 바꿨어요` : `${store().name}: 통보만 받도록 바꿨어요`);
+    document.getElementById("policy").addEventListener("change", async (event) => {
+      const previous = store().approval;
+      try {
+        if (LIVE_MODE) {
+          const updated = await DaetaguhamApi.request(`/stores/${storeKey}/settings`, {
+            method: "PUT", body: { approvalRequired: event.target.checked },
+          });
+          store().approval = updated.approvalRequired;
+        } else store().approval = event.target.checked;
+        render();
+        toast(event.target.checked ? `${store().name}: 승인 후 확정으로 바꿨어요` : `${store().name}: 통보만 받도록 바꿨어요`);
+      } catch (error) {
+        store().approval = previous;
+        render();
+        showError(error.message || "승인 규칙을 바꾸지 못했어요.");
+      }
     });
 
     document.getElementById("copyBtn").addEventListener("click", async () => {
@@ -112,22 +175,43 @@
     document.getElementById("renewBtn").addEventListener("click", () => renewSheet.showModal());
     renewSheet.addEventListener("close", () => {
       if (renewSheet.returnValue !== "yes") return;
-      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-      store().code = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-      render();
-      toast("새 초대코드를 만들었어요");
+      (async () => {
+        try {
+          if (LIVE_MODE) {
+            const result = await DaetaguhamApi.request(`/stores/${storeKey}/invite-code`, { method: "POST" });
+            store().code = result.inviteCode;
+          } else {
+            const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+            store().code = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+          }
+          render();
+          toast("새 초대코드를 만들었어요");
+        } catch (error) {
+          showError(error.message || "초대코드를 새로 만들지 못했어요.");
+        }
+      })();
     });
 
-    document.getElementById("managerList").addEventListener("click", (e) => {
-      const b = e.target.closest("[data-id]");
-      if (!b) return;
-      const m = store().staff.find((x) => x.id === b.dataset.id);
-      m.manager = !m.manager;
-      render();
-      toast(m.manager ? `${m.name}님을 점장으로 임명했어요` : `${m.name}님의 점장을 해제했어요`);
+    document.getElementById("managerList").addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-id]");
+      if (!button) return;
+      const member = store().staff.find((item) => item.id === button.dataset.id);
+      try {
+        if (LIVE_MODE) {
+          const updated = await DaetaguhamApi.request(`/stores/${storeKey}/members/${member.id}/role`, {
+            method: "PUT", body: { role: member.manager ? "WORKER" : "MANAGER" },
+          });
+          member.manager = updated.role === "MANAGER";
+        } else member.manager = !member.manager;
+        render();
+        toast(member.manager ? `${member.name}님을 점장으로 임명했어요` : `${member.name}님의 점장을 해제했어요`);
+      } catch (error) {
+        showError(error.message || "점장 권한을 바꾸지 못했어요.");
+      }
     });
 
-    render();
+    renderSwitch();
+    if (LIVE_MODE) loadStore(); else render();
   </script>
 </body>
 </html>

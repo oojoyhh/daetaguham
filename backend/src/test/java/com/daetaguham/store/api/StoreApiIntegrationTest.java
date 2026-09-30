@@ -3,6 +3,8 @@ package com.daetaguham.store.api;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -117,6 +119,48 @@ class StoreApiIntegrationTest {
 				.content("{\"inviteCode\":\"SEONG7\"}"))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.errorCode").value("OWNER_CANNOT_JOIN"));
+	}
+
+	@Test
+	void ownerReadsAndUpdatesStoreSettingsAndInviteCode() throws Exception {
+		User owner = saveUser("010-1111-2222", "김효주");
+		Store store = storeRepository.save(Store.create(owner, "성수점", "아이스크림·디저트", null, "SEONG7"));
+
+		mockMvc.perform(get("/stores/{storeId}", store.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.inviteCode").value("SEONG7"))
+				.andExpect(jsonPath("$.approvalRequired").value(true));
+
+		mockMvc.perform(put("/stores/{storeId}/settings", store.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"approvalRequired\":false}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.approvalRequired").value(false));
+
+		mockMvc.perform(post("/stores/{storeId}/invite-code", store.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.inviteCode", matchesPattern("^[A-Z0-9]{6}$")))
+				.andExpect(jsonPath("$.inviteCode").isNotEmpty());
+
+		assertThat(storeRepository.findById(store.getId()).orElseThrow().getInviteCode())
+				.isNotEqualTo("SEONG7");
+	}
+
+	@Test
+	void nonOwnerCannotChangeStoreSettings() throws Exception {
+		User owner = saveUser("010-1111-2222", "김효주");
+		User stranger = saveUser("010-9999-8888", "다른사장");
+		Store store = storeRepository.save(Store.create(owner, "성수점", "아이스크림·디저트", null, "SEONG7"));
+
+		mockMvc.perform(put("/stores/{storeId}/settings", store.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(stranger))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"approvalRequired\":false}"))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.errorCode").value("STORE_MANAGEMENT_FORBIDDEN"));
 	}
 
 	private User saveUser(String phone, String name) {

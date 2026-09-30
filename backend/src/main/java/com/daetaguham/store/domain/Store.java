@@ -97,6 +97,14 @@ public class Store {
 		return approvalRequired;
 	}
 
+	public void updateApprovalRequired(boolean approvalRequired) {
+		this.approvalRequired = approvalRequired;
+	}
+
+	public void replaceInviteCode(String inviteCode) {
+		this.inviteCode = Objects.requireNonNull(inviteCode);
+	}
+
 	public LocalDateTime getCreatedAt() {
 		return createdAt;
 	}

@@ -58,18 +58,49 @@
   <script>
     document.getElementById("backIcon").outerHTML = BACK_ICON;
 
-    document.getElementById("submitBtn").addEventListener("click", () => {
+    const LIVE_MODE = DaetaguhamApi.isSignedIn();
+
+    document.getElementById("submitBtn").addEventListener("click", async () => {
       const name = document.getElementById("name").value.trim();
       const err = document.getElementById("formError");
+      const button = document.getElementById("submitBtn");
       let msg = "";
       if (!name) msg = "매장 이름을 입력해 주세요.";
       else if (!document.getElementById("category").value) msg = "업종을 골라주세요.";
       if (msg) { err.textContent = msg; err.hidden = false; return; }
 
-      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-      const code = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+      err.hidden = true;
+      button.disabled = true;
+      button.textContent = "매장을 만드는 중이에요…";
+      let created;
+      try {
+        if (LIVE_MODE) {
+          created = await DaetaguhamApi.request("/stores", {
+            method: "POST",
+            body: {
+              name,
+              category: document.getElementById("category").value,
+              address: document.getElementById("address").value.trim() || null,
+            },
+          });
+          await DaetaguhamApi.refreshSession();
+        } else {
+          const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+          created = {
+            name,
+            inviteCode: Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join(""),
+          };
+        }
+      } catch (error) {
+        err.textContent = error.message || "매장을 만들지 못했어요.";
+        err.hidden = false;
+        button.disabled = false;
+        button.textContent = "매장 만들기";
+        return;
+      }
+
       document.getElementById("doneTitle").textContent = `${name} 매장을 만들었어요`;
-      document.getElementById("code").textContent = code;
+      document.getElementById("code").textContent = created.inviteCode;
       document.getElementById("formView").hidden = true;
       document.getElementById("doneView").hidden = false;
     });

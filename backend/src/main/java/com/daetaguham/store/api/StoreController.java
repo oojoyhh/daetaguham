@@ -50,6 +50,34 @@ public class StoreController {
 		return StoreResponse.from(store);
 	}
 
+	@GetMapping("/{storeId}")
+	public StoreResponse detail(
+			@AuthenticationPrincipal Jwt jwt,
+			@PathVariable Long storeId
+	) {
+		StoreService.StoreAccess access = storeService.findAccessible(Long.valueOf(jwt.getSubject()), storeId);
+		return StoreResponse.from(access.store(), access.includeInviteCode());
+	}
+
+	@PutMapping("/{storeId}/settings")
+	public StoreResponse updateSettings(
+			@AuthenticationPrincipal Jwt jwt,
+			@PathVariable Long storeId,
+			@Valid @RequestBody StoreSettingsRequest request
+	) {
+		return StoreResponse.from(storeService.updateApprovalRequired(
+				Long.valueOf(jwt.getSubject()), storeId, request.approvalRequired()));
+	}
+
+	@PostMapping("/{storeId}/invite-code")
+	public InviteCodeResponse renewInviteCode(
+			@AuthenticationPrincipal Jwt jwt,
+			@PathVariable Long storeId
+	) {
+		Store store = storeService.renewInviteCode(Long.valueOf(jwt.getSubject()), storeId);
+		return new InviteCodeResponse(store.getInviteCode());
+	}
+
 	@PostMapping("/join")
 	@ResponseStatus(HttpStatus.CREATED)
 	public MemberResponse join(

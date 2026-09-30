@@ -27,6 +27,7 @@
 
       <h2 class="section-title">직원 <small id="memberCount"></small></h2>
       <section class="card tight" id="memberList"></section>
+      <p class="error-text" id="staffError" role="alert" hidden></p>
       <span class="api-tag">GET /stores/{id}/members · PUT /stores/{id}/members/{userId}/status</span>
       <p class="help" id="roleHelp" style="text-align:center">점장 임명은 사장님이 매장 설정에서 해요.</p>
     </main>
@@ -67,7 +68,7 @@
 
   <script src="../js/common.js"></script>
   <script>
-    // 매장별 예시 데이터. 사장은 ?role=owner로 두 매장을 전환해서 봐요.
+    const LIVE_MODE = DaetaguhamApi.isSignedIn();
     const STORE_STAFF = {
       A: { name: "성수점", applies: [{ id: "seokhwi", name: "한석휘", phone: "010-****-1111", at: "9/14 신청" }], members: null },
       B: { name: "건대점", applies: [], members: [
@@ -86,12 +87,46 @@
     ];
     let current = null;
     const isOwner = params.get("role") === "owner";
+    const session = DaetaguhamApi.getSession();
+    const liveStores = LIVE_MODE
+      ? (session.stores || []).filter((store) =>
+          store.myRole === (isOwner ? "OWNER" : "MANAGER") && (!store.memberStatus || store.memberStatus === "ACTIVE"))
+      : [];
     let applies, members;
+    let storeName = "";
+
+    const normalizeMember = (member) => ({
+      id: String(member.userId),
+      name: member.name,
+      role: member.role === "MANAGER" ? "점장" : "알바생",
+      phone: member.phone,
+      status: member.status,
+      requestedAt: member.requestedAt,
+      month: Number(member.monthHours || 0),
+      count: member.monthShiftCount || 0,
+      cover: member.coverCount || 0,
+      upcoming: member.upcomingShiftCount || 0,
+    });
+
+    function showError(message = "") {
+      const error = document.getElementById("staffError");
+      error.textContent = message;
+      error.hidden = !message;
+    }
+
+    function renderLiveStoreSwitch() {
+      const box = document.getElementById("storeSwitch");
+      if (!LIVE_MODE || liveStores.length < 2) return;
+      box.hidden = false;
+      box.innerHTML = liveStores.map((store) => `
+        <button type="button" data-live-store="${store.storeId}" aria-pressed="${String(store.storeId) === String(storeKey)}">${escapeHTML(store.storeName)}</button>`).join("");
+    }
 
     function useStore(key) {
       const d = STORE_STAFF[key];
       applies = d.applies;
       members = d.members;
+      storeName = d.name;
       document.querySelectorAll(".account-meta small").forEach((el) => (el.textContent = isOwner ? `${d.name} 직원` : d.name));
       const help = document.getElementById("roleHelp");
       help.innerHTML = isOwner
@@ -99,9 +134,40 @@
         : "점장 임명은 사장님이 매장 설정에서 해요.";
     }
 
-    let storeKey = mountStoreSwitch((k) => { storeKey = k; useStore(k); render(); });
-    if (!isOwner) storeKey = "A";
-    useStore(storeKey);
+    let storeKey;
+    if (LIVE_MODE) {
+      const requested = params.get("store");
+      const first = liveStores.find((store) => String(store.storeId) === requested) || liveStores[0];
+      storeKey = first ? String(first.storeId) : "";
+      applies = [];
+      members = [];
+      storeName = first?.storeName || "매장";
+    } else {
+      storeKey = mountStoreSwitch((key) => { storeKey = key; useStore(key); render(); });
+      if (!isOwner) storeKey = "A";
+      useStore(storeKey);
+    }
+
+    async function loadMembers() {
+      if (!storeKey) {
+        showError("관리할 매장이 없어요.");
+        return;
+      }
+      showError();
+      document.getElementById("memberList").innerHTML = '<div class="list-item"><p class="desc">직원을 불러오는 중이에요…</p></div>';
+      try {
+        const result = await DaetaguhamApi.request(`/stores/${storeKey}/members`);
+        const normalized = result.map(normalizeMember);
+        applies = normalized.filter((member) => member.status === "PENDING");
+        members = normalized.filter((member) => member.status === "ACTIVE");
+        storeName = liveStores.find((store) => String(store.storeId) === String(storeKey))?.storeName || storeName;
+        document.querySelectorAll(".account-meta small").forEach((element) => (element.textContent = isOwner ? `${storeName} 직원` : storeName));
+        renderLiveStoreSwitch();
+        render();
+      } catch (error) {
+        showError(error.message || "직원 목록을 불러오지 못했어요.");
+      }
+    }
 
     function render() {
       document.getElementById("applyBox").hidden = applies.length === 0;
@@ -109,7 +175,7 @@
       document.getElementById("applyList").innerHTML = applies.map((a) => `
         <div class="apply-row">
           <span class="avatar">${shortName(a.name)}</span>
-          <div class="grow"><b>${a.name}</b><p class="help num">${a.phone} · ${a.at}</p></div>
+          <div class="grow"><b>${escapeHTML(a.name)}</b><p class="help num">${escapeHTML(a.phone)} · ${a.at || (a.requestedAt ? `${fmtDate(a.requestedAt.slice(0, 10))} 신청` : "참여 신청")}</p></div>
           <button class="btn btn-sm" type="button" data-reject="${a.id}">거절</button>
           <button class="btn btn-sm btn-primary" type="button" data-accept="${a.id}">승인</button>
         </div>`).join("");
@@ -118,20 +184,32 @@
       document.getElementById("memberList").innerHTML = members.map((m) => `
         <button class="list-item" type="button" data-id="${m.id}">
           <span class="avatar">${shortName(m.name)}</span>
-          <div class="grow"><p class="title">${m.name}</p><p class="desc num">이번 달 ${m.month}시간</p></div>
+          <div class="grow"><p class="title">${escapeHTML(m.name)}</p><p class="desc num">이번 달 ${m.month}시간</p></div>
           ${m.role === "점장" ? `<span class="pill ok">점장</span>` : ""}<span class="chev" aria-hidden="true">›</span>
         </button>`).join("");
     }
 
-    document.getElementById("applyList").addEventListener("click", (e) => {
-      const acc = e.target.closest("[data-accept]");
-      const rej = e.target.closest("[data-reject]");
+    document.getElementById("applyList").addEventListener("click", async (event) => {
+      const acc = event.target.closest("[data-accept]");
+      const rej = event.target.closest("[data-reject]");
       if (!acc && !rej) return;
       const id = (acc || rej).dataset.accept || (acc || rej).dataset.reject;
-      const a = applies.splice(applies.findIndex((x) => x.id === id), 1)[0];
-      if (acc) members.push({ id: a.id, name: a.name, role: "알바생", phone: "010-1111-2222", month: 0, count: 0, cover: 0, upcoming: 0 });
-      render();
-      toast(acc ? `${a.name}님이 ${STORE_STAFF[storeKey].name} 직원이 됐어요` : `${a.name}님의 신청을 거절했어요`);
+      const applicant = applies.find((item) => item.id === id);
+      try {
+        if (LIVE_MODE) {
+          await DaetaguhamApi.request(`/stores/${storeKey}/members/${id}/status`, {
+            method: "PUT", body: { status: acc ? "ACTIVE" : "REJECTED" },
+          });
+          await loadMembers();
+        } else {
+          applies.splice(applies.findIndex((item) => item.id === id), 1);
+          if (acc) members.push({ id: applicant.id, name: applicant.name, role: "알바생", phone: "010-1111-2222", month: 0, count: 0, cover: 0, upcoming: 0 });
+          render();
+        }
+        toast(acc ? `${applicant.name}님이 ${storeName} 직원이 됐어요` : `${applicant.name}님의 신청을 거절했어요`);
+      } catch (error) {
+        showError(error.message || "참여 신청을 처리하지 못했어요.");
+      }
     });
 
     const memberSheet = document.getElementById("memberSheet");
@@ -148,7 +226,7 @@
         <div class="stat"><small>이번 달</small><b>${current.month}h</b></div>
         <div class="stat"><small>근무</small><b>${current.count}회</b></div>
         <div class="stat"><small>대타 해줌</small><b>${current.cover}회</b></div>`;
-      document.getElementById("kickBtn").hidden = current.role === "점장";
+      document.getElementById("kickBtn").hidden = LIVE_MODE || current.role === "점장";
       memberSheet.showModal();
     });
 
@@ -170,7 +248,17 @@
         : `${current.name}님을 내보냈어요`);
     });
 
-    render();
+    document.getElementById("storeSwitch").addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-live-store]");
+      if (!button || button.dataset.liveStore === storeKey) return;
+      storeKey = button.dataset.liveStore;
+      await loadMembers();
+    });
+
+    if (LIVE_MODE) {
+      renderLiveStoreSwitch();
+      loadMembers();
+    } else render();
   </script>
 </body>
 </html>

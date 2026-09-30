@@ -7,6 +7,7 @@ import com.daetaguham.notification.application.NotificationService;
 import com.daetaguham.shift.domain.ShiftTemplate;
 import com.daetaguham.shift.domain.ShiftTemplateRepository;
 import com.daetaguham.store.domain.MemberStatus;
+import com.daetaguham.store.domain.MemberRole;
 import com.daetaguham.store.domain.Store;
 import com.daetaguham.store.domain.StoreMember;
 import com.daetaguham.store.domain.StoreMemberRepository;
@@ -90,6 +91,32 @@ public class StoreService {
 		return membership;
 	}
 
+	@Transactional(readOnly = true)
+	public StoreAccess findAccessible(Long actorId, Long storeId) {
+		Store store = findStore(storeId);
+		if (store.getOwner().getId().equals(actorId)) {
+			return new StoreAccess(store, true);
+		}
+		StoreMember membership = storeMemberRepository.findByStore_IdAndUser_Id(storeId, actorId)
+				.filter(item -> item.getStatus() == MemberStatus.ACTIVE)
+				.orElseThrow(StoreManagementForbiddenException::new);
+		return new StoreAccess(store, membership.getRole() == MemberRole.MANAGER);
+	}
+
+	@Transactional
+	public Store updateApprovalRequired(Long ownerId, Long storeId, boolean approvalRequired) {
+		Store store = findOwnedStore(ownerId, storeId);
+		store.updateApprovalRequired(approvalRequired);
+		return store;
+	}
+
+	@Transactional
+	public Store renewInviteCode(Long ownerId, Long storeId) {
+		Store store = findOwnedStore(ownerId, storeId);
+		store.replaceInviteCode(createUniqueInviteCode());
+		return store;
+	}
+
 	private String createUniqueInviteCode() {
 		for (int attempt = 0; attempt < INVITE_CODE_ATTEMPTS; attempt++) {
 			String inviteCode = inviteCodeGenerator.generate();
@@ -102,5 +129,20 @@ public class StoreService {
 
 	private String normalizeAddress(String address) {
 		return StringUtils.hasText(address) ? address.trim() : null;
+	}
+
+	private Store findStore(Long storeId) {
+		return storeRepository.findById(storeId).orElseThrow(StoreNotFoundException::new);
+	}
+
+	private Store findOwnedStore(Long ownerId, Long storeId) {
+		Store store = findStore(storeId);
+		if (!store.getOwner().getId().equals(ownerId)) {
+			throw new StoreManagementForbiddenException();
+		}
+		return store;
+	}
+
+	public record StoreAccess(Store store, boolean includeInviteCode) {
 	}
 }

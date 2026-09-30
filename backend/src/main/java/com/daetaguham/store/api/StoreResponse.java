@@ -16,6 +16,10 @@ public record StoreResponse(
 		LocalDateTime createdAt
 ) {
 	public static StoreResponse from(Store store) {
+		return from(store, true);
+	}
+
+	public static StoreResponse from(Store store, boolean includeInviteCode) {
 		return new StoreResponse(
 				store.getId(),
 				store.getOwner().getId(),
@@ -23,7 +27,7 @@ public record StoreResponse(
 				store.getName(),
 				store.getCategory(),
 				store.getAddress(),
-				store.getInviteCode(),
+				includeInviteCode ? store.getInviteCode() : null,
 				store.isApprovalRequired(),
 				store.getCreatedAt()
 		);
