@@ -35,6 +35,7 @@
         </div>
         <p class="error-text" id="loginError" hidden></p>
         <p class="help" id="coldStartHint" hidden>무료 데모 서버를 깨우는 중이에요. 첫 로그인은 1분 이상 걸릴 수 있어요.</p>
+        <p class="help" id="serverStatus" role="status">데모 서버 상태를 확인하는 중이에요…</p>
         <button class="btn btn-primary btn-block" type="submit">로그인</button>
         <span class="api-tag">POST /auth/login</span>
       </form>
@@ -87,6 +88,20 @@
       element.textContent = message;
       element.hidden = false;
     };
+
+    const serverStatus = document.getElementById("serverStatus");
+    if (DaetaguhamApi.baseUrl.includes("onrender.com")) {
+      DaetaguhamApi.warmUp()
+        .then(() => {
+          serverStatus.textContent = "데모 서버 준비 완료";
+          serverStatus.style.color = "var(--accent)";
+        })
+        .catch(() => {
+          serverStatus.textContent = "로그인하면 서버 연결을 다시 시도할게요.";
+        });
+    } else {
+      serverStatus.hidden = true;
+    }
 
     const setBusy = (button, busy, busyLabel) => {
       if (!button.dataset.label) button.dataset.label = button.textContent;

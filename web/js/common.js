@@ -49,7 +49,7 @@
   const DEPLOYED_API_BASE = "https://daetaguham-api-oojoyhh.onrender.com/api";
   const AUTH_KEY = "daetaguham-auth-v1";
   // Render 무료 인스턴스는 첫 요청 시 1분 이상 기동할 수 있어요.
-  const AUTH_COLD_START_TIMEOUT = 90000;
+  const AUTH_COLD_START_TIMEOUT = 180000;
 
   class ApiError extends Error {
     constructor(message, options = {}) {
@@ -173,6 +173,13 @@
         body: { name, phone, password },
       });
       return this.login(phone, password);
+    },
+
+    async warmUp() {
+      return this.request("/actuator/health", {
+        auth: false,
+        timeout: AUTH_COLD_START_TIMEOUT,
+      });
     },
 
     async refreshSession() {
